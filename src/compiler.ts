@@ -9,6 +9,7 @@ export type Input = import('./compiler-legacy').Input;
 export type GenerateOptions = import('./compiler-legacy').GenerateOptions;
 export type IdeaLock = import('./compiler-legacy').IdeaLock;
 export type Prompt = import('./compiler-legacy').Prompt;
+type PromptWithSettings = Prompt & { settings?: string[] };
 
 const clean = (value: string) => value.replace(/[.!?]+$/, '').trim();
 const unique = (items: string[]) => items.filter((item, index) => items.findIndex(other => other.toLowerCase() === item.toLowerCase()) === index);
@@ -55,9 +56,10 @@ const extractExclusions = (text: string) => {
 const explicitStructureHeading = (text: string) => /(?:^|\n)\s*(?:screens|pages|views)\s*:/i.test(text);
 const workflowAction = /^(?:punch\s+(?:in|out)|start\s+my\s+day|start\s+route|day\s+complete|finish\s+day|start\s+(?:work|shift)|end\s+(?:work|shift)|save|submit|continue|cancel|finish|complete|confirm)$/i;
 const behaviorLikeStructure = /\b(?:opens?|shows?|allows?|pressing|tapping|tap|clicking|use|provide)\b/i;
+const settingsOptionStructure = /^(?:theme(?:\s+with\s+.*)?|light|dark|automatic|auto|time\s*format|date\s*format|payment preferences?)$/i;
 const cleanStructures = (text: string, screens: readonly string[]) => {
-  if (explicitStructureHeading(text)) return [...screens];
-  return unique([...screens].filter(screen => !workflowAction.test(clean(screen)) && !behaviorLikeStructure.test(screen)));
+  if (explicitStructureHeading(text)) return unique([...screens].filter(screen => !settingsOptionStructure.test(clean(screen))));
+  return unique([...screens].filter(screen => !workflowAction.test(clean(screen)) && !behaviorLikeStructure.test(screen) && !settingsOptionStructure.test(clean(screen))));
 };
 
 const requirementLead = /^(?:(?:only\s+)?(?:when\b|during\b|pressing\b|show\b|allow\b|use\b|provide\b|include\b|record\b|add\b|mark\b|edit\b|delete\b|remove\b|calculate\b|track\b|set\b|update\b)|(?:also\s+)?include\b|[A-Z][A-Za-z0-9 &/+-]{0,48}\s+should\b)/i;
@@ -123,6 +125,43 @@ const extractMobileConstraints = (text: string) => {
     if (match?.[1]) found.push(`Keep the interface optimized for ${clean(match[1])}`);
   }
   return unique(found);
+};
+
+const extractExplicitSettings = (text: string) => {
+  const marker = /\bSettings\s*:/i.exec(text);
+  if (!marker) return [];
+  const after = text.slice((marker.index ?? 0) + marker[0].length);
+  const body = after.split(/\n\s*\n/)[0].trim();
+  if (!body) return [];
+  const lines: string[] = [];
+  for (const sentence of (body.match(/[^.!?]+(?:[.!?]|$)/g) || [body])) {
+    let value = clean(sentence.replace(/^\s*(?:also\s+)?include\s+/i, ''));
+    if (!value || /^(?:no|do not|don't)\b/i.test(value)) continue;
+    if (/^Theme\s+with\s+Light\s*,\s*Dark\s*,\s*and\s+Automatic$/i.test(value)) {
+      lines.push('Theme: Light / Dark / Automatic');
+      continue;
+    }
+    if (/^Manage Credit Cards\s+and\s+Income Schedule$/i.test(value)) {
+      lines.push('Manage Credit Cards', 'Income Schedule');
+      continue;
+    }
+    if (/^Home Base\s+and\s+Truck Profiles$/i.test(value)) {
+      lines.push('Home Base', 'Truck Profiles');
+      continue;
+    }
+    lines.push(value);
+  }
+  return unique(lines);
+};
+
+const inferSettings = (text: string, creationFormat?: CreationFormat) => {
+  const richFormat = ['android-app', 'ios-app', 'responsive-web-app', 'desktop-app', 'multi-screen-app'].includes(creationFormat || '');
+  if (!richFormat) return [];
+  const lower = text.toLowerCase();
+  if (/timesheet|time sheet|work hours|punch in|punch out/.test(lower)) return ['Time format preference', 'Theme: Light / Dark / Automatic', 'History and saved-workday management'];
+  if (/budget|financial|finance|income|bills|credit card/.test(lower)) return ['Theme: Light / Dark / Automatic', 'Manage recurring financial items', 'Income schedule', 'Data management'];
+  if (/drop\s*&?\s*hook|truck|driver|trailer/.test(lower)) return ['Theme: Light / Dark / Automatic', 'Saved work profiles'];
+  return [];
 };
 
 const titleFromFirstLine = (text: string, fallback: string) => {
@@ -196,7 +235,7 @@ export function parseIdea(raw: string): IdeaLock {
   return freeze(lock) as IdeaLock;
 }
 
-export function compile(raw: string, options: GenerateOptions = {}): Prompt {
+export function compile(raw: string, options: GenerateOptions = {}): PromptWithSettings {
   const base = legacy.compile(raw, options);
   const lock = parseIdea(raw);
   const inferred = options.buildType === 'app-web-app'
@@ -205,6 +244,8 @@ export function compile(raw: string, options: GenerateOptions = {}): Prompt {
   const features = inferred.features.length
     ? unique([...removeProductEcho(lock.requiredFeatures, lock), ...inferred.features])
     : [...lock.requiredFeatures];
+  const explicitSettings = extractExplicitSettings(raw);
+  const settings = explicitSettings.length ? explicitSettings : options.buildType === 'app-web-app' ? inferSettings(raw, options.creationFormat) : [];
   return {
     ...base,
     role: conciseRole(base.role, options.buildType),
@@ -212,11 +253,12 @@ export function compile(raw: string, options: GenerateOptions = {}): Prompt {
     lock,
     targetUser: lock.targetUser,
     workflow: lock.workflow,
-    screens: unique([...lock.screens, ...inferred.screens]),
+    screens: unique([...lock.screens, ...inferred.screens]).filter(screen => !settingsOptionStructure.test(clean(screen))),
     features,
     states: unique([...lock.stateRules, ...lock.persistenceRules, ...inferred.states]),
     constraints: unique([...lock.constraints, ...appBuildConstraints(options.buildType)]),
     doNotAdd: [...lock.explicitExclusions],
+    settings,
   };
 }
 
@@ -235,6 +277,13 @@ const replaceTailSection = (output: string, name: string, body: string) => {
   const startAt = output.indexOf(start);
   if (startAt < 0) return output;
   return `${output.slice(0, startAt + start.length)}${body}`;
+};
+const insertBeforeSection = (output: string, name: string, heading: string, body: string) => {
+  if (!body.trim() || output.includes(`\n\n${heading}\n\n`)) return output;
+  const marker = `\n\n${name}\n\n`;
+  const at = output.indexOf(marker);
+  if (at < 0) return output;
+  return `${output.slice(0, at)}\n\n${heading}\n\n${body.trim()}${output.slice(at)}`;
 };
 const sectionBody = (output: string, name: string, next: string) => output.split(`${name}\n\n`)[1]?.split(`\n\n${next}\n\n`)[0] || '';
 const compactLock = (prompt: Prompt) => [
@@ -265,7 +314,7 @@ const polishCoreLine = (line: string) => {
   value = value.replace(/^Then make (.+?) automatic with (.+?)\.?$/i, 'Manage $1 automatically with $2.');
   return value;
 };
-const polishCore = (output: string, prompt: Prompt) => unique(
+const polishCore = (output: string, prompt: PromptWithSettings) => unique(
   sectionBody(output, 'Core Features', 'Interaction & State Rules')
     .split(/\r?\n/)
     .map(line => line.trim())
@@ -274,7 +323,7 @@ const polishCore = (output: string, prompt: Prompt) => unique(
     .map(polishCoreLine)
     .filter(Boolean)
 ).join('\n');
-const validationCoreFeatures = (prompt: Prompt) => prompt.features
+const validationCoreFeatures = (prompt: PromptWithSettings) => prompt.features
   .filter(feature => !stateOwnedCoreLine(feature, prompt.states))
   .map(feature => {
     const polished = clean(polishCoreLine(sentenceLine(feature)));
@@ -287,7 +336,7 @@ const completionFor = (prompt: Prompt) => {
     : 'Implement every locked requirement exactly and add no unrequested screens, features, integrations, roles, or workflows.';
 };
 
-export function assemble(prompt: Prompt) {
+export function assemble(prompt: PromptWithSettings) {
   let output = legacy.assemble(prompt);
   output = replaceSection(output, 'Idea Lock', 'Target User', compactLock(prompt));
   if (prompt.lock.optionalFeatures.length) {
@@ -298,6 +347,7 @@ export function assemble(prompt: Prompt) {
   if (prompt.states.length) output = replaceSection(output, 'Interaction & State Rules', 'Visual Direction', unique(prompt.states.map(sentenceLine).filter(Boolean)).join('\n'));
   output = replaceSection(output, 'Core Features', 'Interaction & State Rules', polishCore(output, prompt));
   output = replaceSection(output, 'Build Quality & Brand Experience', 'Constraints', compactQuality(output));
+  if (prompt.settings?.length) output = insertBeforeSection(output, 'Completion Standard', 'Settings', unique(prompt.settings.map(sentenceLine).filter(Boolean)).join('\n'));
   output = replaceTailSection(output, 'Completion Standard', completionFor(prompt));
   return output;
 }
@@ -325,7 +375,15 @@ const validateOptional = (prompt: Prompt, output: string) => {
     if (requiredOnly.includes(opt.toLowerCase())) throw Error(`Optional feature promoted: ${opt}`);
   }
 };
-const validationPrompt = (prompt: Prompt): Prompt => ({
+const validateSettings = (prompt: PromptWithSettings, output: string) => {
+  if (!prompt.settings?.length) return;
+  const lower = output.toLowerCase();
+  for (const item of prompt.settings) {
+    const tokens = normalized(item).split(' ').filter(token => token.length > 2 && !['with', 'and', 'the'].includes(token));
+    if (tokens.length && !tokens.every(token => lower.includes(token))) throw Error(`Setting missing: ${item}`);
+  }
+};
+const validationPrompt = (prompt: PromptWithSettings): Prompt => ({
   ...prompt,
   workflow: '',
   features: [],
@@ -339,17 +397,19 @@ const validationPrompt = (prompt: Prompt): Prompt => ({
   },
 });
 
-export function validateContradictions(prompt: Prompt, output: string) {
+export function validateContradictions(prompt: PromptWithSettings, output: string) {
   validateCompactLock(prompt, output);
   validateWorkflow(prompt, output);
   validateOptional(prompt, output);
+  validateSettings(prompt, output);
   return legacy.validateContradictions(validationPrompt(prompt), output);
 }
 
-export function validate(prompt: Prompt, output: string) {
+export function validate(prompt: PromptWithSettings, output: string) {
   validateCompactLock(prompt, output);
   validateWorkflow(prompt, output);
   validateOptional(prompt, output);
+  validateSettings(prompt, output);
   return legacy.validate(validationPrompt(prompt), output);
 }
 
