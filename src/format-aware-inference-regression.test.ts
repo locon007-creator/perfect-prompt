@@ -34,9 +34,9 @@ describe('global format-aware minimum viable inference', () => {
 
   test('explicit requirements always outrank inferred defaults', () => {
     const idea = 'Build a daily routine app. Only allow creating routine items and marking them complete. No history, reminders, streaks, or calendar.';
-    const output = generate(idea, { buildType: 'app-web-app', creationFormat: 'multi-screen-app', visualStyle: 'premium-modern' }).toLowerCase();
-    expect(output).toContain('creating routine');
-    expect(output).toContain('marking them complete');
+    const output = generate(idea, { buildType: 'app-web-app', creationFormat: 'multi-screen-app', visualStyle: 'premium-modern' });
+    expect(output.toLowerCase()).toContain('creating routine');
+    expect(output.toLowerCase()).toContain('marking them complete');
     expect(section(output, 'Do Not Add', 'Completion Standard').toLowerCase()).toMatch(/history|reminders|streaks|calendar/);
     expect(section(output, 'Core Features', 'Interaction & State Rules').toLowerCase()).not.toMatch(/history|reminder|streak|calendar/);
   });
