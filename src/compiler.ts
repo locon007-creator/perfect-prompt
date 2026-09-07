@@ -258,7 +258,8 @@ const stateOwnedCoreLine = (line: string, states: readonly string[]) => {
 const polishCoreLine = (line: string) => {
   let value = line.trim();
   value = value.replace(/^Record\s+Add\s+/i, 'Add ');
-  value = value.replace(/^Help\s+the\s+user\s+set\s+up\s+/i, "Set up the user's ");
+  value = value.replace(/^Help\s+the\s+user\s+set\s+up\s+their\s+/i, "Set up the user's ");
+  value = value.replace(/^Help\s+the\s+user\s+set\s+up\s+/i, 'Set up ');
   value = value.replace(/^Recurring monthly bills once\.?$/i, 'Set up recurring monthly bills once and reuse their saved schedules.');
   value = value.replace(/^Then make (.+?) mostly automatic with (.+?)\.?$/i, 'Manage $1 automatically with $2.');
   value = value.replace(/^Then make (.+?) automatic with (.+?)\.?$/i, 'Manage $1 automatically with $2.');
@@ -273,6 +274,12 @@ const polishCore = (output: string, prompt: Prompt) => unique(
     .map(polishCoreLine)
     .filter(Boolean)
 ).join('\n');
+const validationCoreFeatures = (prompt: Prompt) => prompt.features
+  .filter(feature => !stateOwnedCoreLine(feature, prompt.states))
+  .map(feature => {
+    const polished = clean(polishCoreLine(sentenceLine(feature)));
+    return polished.toLowerCase() === clean(feature).toLowerCase() ? feature : polished;
+  });
 const completionFor = (prompt: Prompt) => {
   if (prompt.buildType !== 'app-web-app') return prompt.completion;
   return prompt.lock.workflow
@@ -327,7 +334,7 @@ const validationPrompt = (prompt: Prompt): Prompt => ({
     workflow: '',
     lockedInstructions: [],
     optionalFeatures: [],
-    requiredFeatures: [...prompt.features],
+    requiredFeatures: validationCoreFeatures(prompt),
     screens: [...prompt.screens],
   },
 });
