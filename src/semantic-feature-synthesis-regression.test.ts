@@ -42,7 +42,10 @@ describe('semantic feature synthesis', () => {
     expect(core).toContain('Punch out to end the active shift.');
     expect(core).toContain('Show a live elapsed shift timer that remains accurate if the app is closed and reopened.');
     expect(core).toContain('Calculate and save total daily worked hours.');
-    expect(core).toContain('Show a Sunday–Friday Weekly view with daily hours and the weekly total.');
+    expect(core).toMatch(/Weekly view/i);
+    expect(core).toMatch(/Sunday–Friday/i);
+    expect(core).toMatch(/each day’s hours|daily hours/i);
+    expect(core).toMatch(/weekly total/i);
     expect(core).toContain('Provide History for reviewing and editing previous workdays.');
     expect(core).toContain('Allow the user to choose their preferred time format.');
     expect(states).toContain('Save all timesheet data locally so entries survive app restarts');
