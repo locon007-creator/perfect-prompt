@@ -1,11 +1,14 @@
-import React,{useEffect,useState}from'react';
+import React,{useMemo,useState}from'react';
 import{createRoot}from'react-dom/client';
 import{generate}from'./compiler';
+import{buildTypeOptions,type BuildType}from'./intent';
+import{getStarterCategory,starterCategories,type StarterCategoryId}from'./starter-library';
 import'./styles.css';
 
-type IconName='menu'|'pencil'|'paste'|'trash'|'sparkle'|'copy'|'save'|'bulb'|'phone'|'tool'|'chart'|'finance'|'truck'|'chevron';
+type Screen='generator'|'category-index'|'category'|'saved'|'basics'|'settings';
+type IconName='menu'|'pencil'|'paste'|'trash'|'sparkle'|'copy'|'save'|'bulb'|'phone'|'tool'|'chart'|'finance'|'truck'|'chevron'|'back'|'layers'|'book'|'settings';
 
-function Icon({name}: {name:IconName}){
+function Icon({name}:{name:IconName}){
  const common={width:22,height:22,viewBox:'0 0 24 24',fill:'none',stroke:'currentColor',strokeWidth:1.9,strokeLinecap:'round' as const,strokeLinejoin:'round' as const,'aria-hidden':true};
  const paths:Record<IconName,React.ReactNode>={
   menu:<><path d="M4 6h16M4 12h16M4 18h16"/></>,
@@ -21,74 +24,72 @@ function Icon({name}: {name:IconName}){
   chart:<><path d="M5 20V10M12 20V4M19 20v-7"/></>,
   finance:<><path d="M4 7c0-2 3.6-3 8-3s8 1 8 3-3.6 3-8 3-8-1-8-3z"/><path d="M4 7v5c0 2 3.6 3 8 3s8-1 8-3V7M4 12v5c0 2 3.6 3 8 3s8-1 8-3v-5"/></>,
   truck:<><path d="M3 7h11v9H3zM14 10h4l3 3v3h-7z"/><circle cx="7" cy="18" r="2"/><circle cx="17" cy="18" r="2"/></>,
-  chevron:<><path d="M9 5l7 7-7 7"/></>
+  chevron:<><path d="M9 5l7 7-7 7"/></>,
+  back:<><path d="M15 18l-6-6 6-6"/></>,
+  layers:<><path d="M12 2 3 7l9 5 9-5-9-5zM3 12l9 5 9-5M3 17l9 5 9-5"/></>,
+  book:<><path d="M4 4h6a3 3 0 0 1 3 3v13a3 3 0 0 0-3-3H4V4zM20 4h-6a3 3 0 0 0-3 3v13a3 3 0 0 1 3-3h6V4z"/></>,
+  settings:<><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1-2.8 2.8-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6V21h-4v-.1a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1L4.2 17l.1-.1a1.7 1.7 0 0 0 .3-1.9A1.7 1.7 0 0 0 3 14H3v-4h.1a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9L4.2 7 7 4.2l.1.1a1.7 1.7 0 0 0 1.9.3 1.7 1.7 0 0 0 1-1.6V3h4v.1a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l.1-.1L19.8 7l-.1.1a1.7 1.7 0 0 0-.3 1.9 1.7 1.7 0 0 0 1.6 1h.1v4H21a1.7 1.7 0 0 0-1.6 1z"/></>
  };
  return <svg {...common}>{paths[name]}</svg>;
 }
 
-const categories=[
- {name:'App',icon:'phone' as IconName},
- {name:'Utility',icon:'tool' as IconName},
- {name:'Productivity',icon:'chart' as IconName},
- {name:'Finance',icon:'finance' as IconName},
- {name:'Trucking',icon:'truck' as IconName}
-];
+const categoryIcons:Record<StarterCategoryId,IconName>={app:'phone',utility:'tool',productivity:'chart',finance:'finance',trucking:'truck'};
+const savedKey='perfect-prompt:saved';
+const readSaved=():string[]=>{try{const parsed=JSON.parse(localStorage.getItem(savedKey)||'[]');return Array.isArray(parsed)?parsed.filter(x=>typeof x==='string'):[]}catch{return[]}};
 
 function App(){
  const[idea,setIdea]=useState('');
  const[prompt,setPrompt]=useState('');
  const[error,setError]=useState('');
- const[selected,setSelected]=useState('App');
- const[saved,setSaved]=useState(false);
+ const[saved,setSaved]=useState<string[]>(()=>readSaved());
  const[menuOpen,setMenuOpen]=useState(false);
+ const[screen,setScreen]=useState<Screen>('generator');
+ const[buildType,setBuildType]=useState<BuildType>('app-web-app');
+ const[buildPickerOpen,setBuildPickerOpen]=useState(false);
+ const[activeCategory,setActiveCategory]=useState<StarterCategoryId>('app');
+ const[expandedStarter,setExpandedStarter]=useState<string|null>(null);
+ const profile=useMemo(()=>buildTypeOptions.find(x=>x.buildType===buildType)!,[buildType]);
+ const category=getStarterCategory(activeCategory);
 
- useEffect(()=>{const last=localStorage.getItem('perfect-prompt:last');if(last)setPrompt(last)},[]);
-
- function go(){try{const next=generate(idea);setPrompt(next);setError('');setSaved(false)}catch(e){setError(e instanceof Error?e.message:'Please add more detail.')}}
+ function navigate(next:Screen){setScreen(next);setMenuOpen(false);setBuildPickerOpen(false)}
+ function go(){try{const next=generate(idea,{buildType});setPrompt(next);setError('')}catch(e){setError(e instanceof Error?e.message:'Please add more detail.')}}
  async function paste(){try{const text=await navigator.clipboard.readText();setIdea(text);setError('')}catch{setError('Clipboard access was blocked. Tap and hold in the idea box to paste.')}}
  function clearIdea(){setIdea('');setError('')}
- function clearPrompt(){setPrompt('');setSaved(false);localStorage.removeItem('perfect-prompt:last')}
+ function clearPrompt(){setPrompt('')}
  async function copyPrompt(){if(prompt)await navigator.clipboard.writeText(prompt)}
- function savePrompt(){if(!prompt)return;localStorage.setItem('perfect-prompt:last',prompt);setSaved(true)}
+ function savePrompt(){if(!prompt)return;const next=[prompt,...saved.filter(x=>x!==prompt)];setSaved(next);localStorage.setItem(savedKey,JSON.stringify(next))}
+ function removeSaved(index:number){const next=saved.filter((_,i)=>i!==index);setSaved(next);localStorage.setItem(savedKey,JSON.stringify(next))}
+ function clearSaved(){setSaved([]);localStorage.removeItem(savedKey)}
+ function openCategory(id:StarterCategoryId){setActiveCategory(id);setExpandedStarter(null);setScreen('category');setMenuOpen(false)}
 
- return <main className="app-shell">
-  <header className="topbar">
-   <div className="brand-block"><h1>Perfect <span>Prompt</span></h1><p>Turn your ideas into powerful prompts.</p></div>
-   <button className="icon-button menu-button" onClick={()=>setMenuOpen(v=>!v)} aria-label="Open menu"><Icon name="menu"/></button>
-   {menuOpen&&<div className="menu-popover"><button onClick={()=>{setSelected('App');setMenuOpen(false)}}>Generator</button><button onClick={()=>setMenuOpen(false)}>Saved Prompt</button></div>}
-  </header>
+ const header=<header className="topbar">
+  <div className="brand-block"><h1>Perfect <span>Prompt</span></h1><p>Turn your ideas into powerful prompts.</p></div>
+  <button className="icon-button menu-button" onClick={()=>setMenuOpen(v=>!v)} aria-label="Open menu"><Icon name="menu"/></button>
+  {menuOpen&&<div className="menu-popover">
+   <button onClick={()=>navigate('generator')}>Generator</button>
+   <button onClick={()=>navigate('category-index')}>Prompt Categories</button>
+   <button onClick={()=>navigate('saved')}>Saved Prompts</button>
+   <button onClick={()=>navigate('basics')}>Prompt Basics</button>
+   <button onClick={()=>navigate('settings')}>Settings</button>
+  </div>}
+ </header>;
 
-  <section className="idea-panel" aria-label="Describe your app idea">
-   <div className="idea-heading">
-    <div className="idea-title"><span className="idea-icon"><Icon name="pencil"/></span><strong>Describe your app idea</strong></div>
-    <div className="idea-tools"><button onClick={paste}><Icon name="paste"/>Paste</button><button onClick={clearIdea}><Icon name="trash"/>Clear</button></div>
-   </div>
-   <textarea value={idea} maxLength={2000} onChange={e=>setIdea(e.target.value)} placeholder="Type or paste your idea here..." aria-label="App idea"/>
-   {!idea&&<p className="example">Example: A budgeting app for personal use<br/>with a clean mobile design, offline support,<br/>and spending insights...</p>}
-   <span className="counter">{idea.length}/2000</span>
+ if(screen!=='generator')return <main className="app-shell">{header}<div className="screen-toolbar"><button className="back-button" onClick={()=>navigate('generator')}><Icon name="back"/>Generator</button></div>{screen==='category-index'&&<section className="page-card"><div className="page-heading"><Icon name="layers"/><div><h2>Prompt Categories</h2><p>Choose a practical starter category.</p></div></div><div className="category-list">{starterCategories.map(item=><button key={item.id} onClick={()=>openCategory(item.id)}><span className="list-icon"><Icon name={categoryIcons[item.id]}/></span><span><strong>{item.label}</strong><small>{item.description}</small></span><Icon name="chevron"/></button>)}</div></section>}{screen==='category'&&<section className="page-card"><div className="page-heading"><Icon name={categoryIcons[category.id]}/><div><h2>{category.label}</h2><p>{category.description}</p></div></div><div className="starter-list">{category.starters.map(starter=>{const open=expandedStarter===starter.id;return <article className={open?'starter-card open':'starter-card'} key={starter.id}><button className="starter-toggle" onClick={()=>setExpandedStarter(current=>current===starter.id?null:starter.id)}><span>{starter.title}</span><span className={open?'rotate':''}>⌄</span></button>{open&&<div className="starter-body"><p>{starter.brief}</p><button className="send-button" onClick={()=>{setIdea(starter.brief);setScreen('generator');setExpandedStarter(null);setError('')}}>Send to Generator <Icon name="chevron"/></button></div>}</article>})}</div></section>}{screen==='saved'&&<section className="page-card"><div className="page-heading"><Icon name="save"/><div><h2>Saved Prompts</h2><p>Your intentionally saved prompts stay on this device.</p></div></div>{saved.length?<div className="saved-list">{saved.map((item,index)=><article className="saved-card" key={`${item.slice(0,20)}-${index}`}><pre>{item}</pre><div><button onClick={()=>navigator.clipboard.writeText(item)}><Icon name="copy"/>Copy</button><button onClick={()=>removeSaved(index)}><Icon name="trash"/>Delete</button></div></article>)}</div>:<div className="simple-empty"><Icon name="save"/><strong>No saved prompts yet.</strong><p>Generate a prompt, then tap Save.</p></div>}</section>}{screen==='basics'&&<section className="page-card"><div className="page-heading"><Icon name="book"/><div><h2>Prompt Basics</h2><p>Give Perfect Prompt the information that matters.</p></div></div><div className="basics-list"><article><strong>1. Choose what you want to build</strong><p>This selects the specialist role used by the compiler.</p></article><article><strong>2. Describe the real job</strong><p>Say who it is for, what it should do, the workflow, and anything it must not add.</p></article><article><strong>3. Use a starter only when useful</strong><p>Starter ideas fill the idea box first. You stay in control and can edit before generating.</p></article><article><strong>4. Generate and review</strong><p>Your idea still passes through the deterministic Idea Lock and validation before the final prompt appears.</p></article></div></section>}{screen==='settings'&&<section className="page-card"><div className="page-heading"><Icon name="settings"/><div><h2>Settings</h2><p>Only controls that actually change local app behavior.</p></div></div><div className="settings-row"><div><strong>Clear saved prompts</strong><p>Deletes saved prompts from this browser only.</p></div><button onClick={clearSaved} disabled={!saved.length}>Clear</button></div></section>}</main>;
+
+ return <main className="app-shell">{header}
+  <section className="build-picker">
+   <button className="build-picker-trigger" onClick={()=>setBuildPickerOpen(v=>!v)} aria-expanded={buildPickerOpen}><span><small>What would you like to build?</small><strong>{profile.label}</strong></span><span className={buildPickerOpen?'picker-arrow open':'picker-arrow'}>⌄</span></button>
+   {buildPickerOpen&&<div className="build-options">{buildTypeOptions.map(option=><button key={option.buildType} className={buildType===option.buildType?'selected':''} onClick={()=>{setBuildType(option.buildType);setBuildPickerOpen(false)}}><span><strong>{option.label}</strong><small>{option.emphasis.slice(0,3).join(' · ')}</small></span>{buildType===option.buildType&&<span className="check">✓</span>}</button>)}</div>}
   </section>
+
+  <section className="idea-panel" aria-label="Describe your idea"><div className="idea-heading"><div className="idea-title"><span className="idea-icon"><Icon name="pencil"/></span><strong>Describe your idea</strong></div><div className="idea-tools"><button onClick={paste}><Icon name="paste"/>Paste</button><button onClick={clearIdea}><Icon name="trash"/>Clear</button></div></div><textarea value={idea} maxLength={2000} onChange={e=>setIdea(e.target.value)} placeholder="Type or paste your idea here..." aria-label="Idea"/>{!idea&&<p className="example">Example: A budgeting app for personal use<br/>with a clean mobile design, offline support,<br/>and spending insights...</p>}<span className="counter">{idea.length}/2000</span></section>
   {error&&<div className="error" role="alert">{error}</div>}
 
-  <section className="category-section">
-   <div className="category-label"><strong>Choose a category <span>(swipe to explore)</span></strong><button onClick={()=>document.querySelector('.category-row')?.scrollTo({left:999,behavior:'smooth'})}>See all <span>→</span></button></div>
-   <div className="category-row">
-    {categories.map(category=><button key={category.name} className={selected===category.name?'category active':'category'} onClick={()=>setSelected(category.name)}><Icon name={category.icon}/>{category.name}</button>)}
-   </div>
-  </section>
+  <section className="category-section"><div className="category-label"><strong>Need a starting point? <span>Choose a category</span></strong><button onClick={()=>navigate('category-index')}>See all <span>→</span></button></div><div className="category-row">{starterCategories.map(item=><button key={item.id} className="category" onClick={()=>openCategory(item.id)}><Icon name={categoryIcons[item.id]}/>{item.label}</button>)}</div></section>
 
   <button className="generate" onClick={go} disabled={!idea.trim()}><span className="generate-label"><Icon name="sparkle"/>Generate Prompt</span><span className="generate-arrow"><Icon name="chevron"/></span></button>
-
-  <section className={prompt?'output-panel has-output':'output-panel'} aria-live="polite">
-   {prompt?<pre>{prompt}</pre>:<div className="empty-state"><div className="bulb"><Icon name="bulb"/></div><h2>Your generated prompt<br/>will appear here after you generate.</h2><p>Turn your ideas into detailed, ready-to-use prompts<br/>for amazing apps.</p></div>}
-  </section>
-
-  <div className="output-actions">
-   <button className="copy-action" onClick={copyPrompt} disabled={!prompt}><Icon name="copy"/>Copy Prompt</button>
-   <button className={saved?'save-action saved':'save-action'} onClick={savePrompt} disabled={!prompt}><Icon name="save"/>{saved?'Saved':'Save'}</button>
-   <button className="clear-action" onClick={clearPrompt} disabled={!prompt}><Icon name="trash"/>Clear</button>
-  </div>
-
-  <footer>Better ideas. Better apps. Perfect Prompts.</footer>
+  <section className={prompt?'output-panel has-output':'output-panel'} aria-live="polite">{prompt?<pre>{prompt}</pre>:<div className="empty-state"><div className="bulb"><Icon name="bulb"/></div><h2>Your generated prompt<br/>will appear here after you generate.</h2><p>Choose what you want to build, describe the idea,<br/>and Perfect Prompt will route the right specialist.</p></div>}</section>
+  <div className="output-actions"><button className="copy-action" onClick={copyPrompt} disabled={!prompt}><Icon name="copy"/>Copy Prompt</button><button className="save-action" onClick={savePrompt} disabled={!prompt}><Icon name="save"/>Save</button><button className="clear-action" onClick={clearPrompt} disabled={!prompt}><Icon name="trash"/>Clear</button></div>
  </main>
 }
 
