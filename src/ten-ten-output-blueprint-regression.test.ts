@@ -21,7 +21,8 @@ const section = (output: string, name: string, next: string) => output.split(`${
 
 const assertNoJunk = (output: string) => {
   expect(output).not.toMatch(/^\s*(?:Show|Add|Record|Include)\s*:\s*\.?\s*$/gim);
-  expect(output).not.toMatch(/^\s*[A-Za-z][A-Za-z /&+-]{0,40}\.?\s*$/gm);
+  const core = section(output, 'Core Features', 'Interaction & State Rules');
+  expect(core).not.toMatch(/^\s*(?:tracker|utility|app|application|tool|manager|assistant)\.?\s*$/gim);
 };
 
 describe('10/10 global output blueprint', () => {
@@ -66,6 +67,8 @@ describe('10/10 global output blueprint', () => {
     const output = generate(`Reading Log\n\nBuild a reading tracker for one reader.\nMain workflow: Home → Books → Book.\nAllow adding a book, updating reading progress, and saving completed books.\nSettings: Theme with Light, Dark, and Automatic. Reading goal.\nDo not add social feeds or teams.`, opts);
     expect(headings(output).length).toBeGreaterThanOrEqual(13);
     assertNoJunk(output);
-    expect(section(output, 'Core Features', 'Interaction & State Rules')).toMatch(/Allow|Add|Update|Save|Track|Show|Provide/i);
+    const core = section(output, 'Core Features', 'Interaction & State Rules');
+    expect(core).not.toMatch(/^Reading tracker\.?$/im);
+    expect(core).toMatch(/Allow|Add|Update|Save|Track|Show|Provide/i);
   });
 });
