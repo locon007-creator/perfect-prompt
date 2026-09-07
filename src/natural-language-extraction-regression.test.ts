@@ -78,7 +78,7 @@ Keep it strictly personal. Do not add teams, employee management, GPS tracking, 
   });
 
   test('assembles a complete prompt without duplicated audience wording', () => {
-    const output = generate(idea, { buildType: 'app-web-app', visualStyle: 'figma-level' });
+    const output = generate(idea, { buildType: 'app-web-app', visualStyle: 'figma-product' });
     expect(output).toContain('Project name: Work Log');
     expect(output).toContain('Target user: one worker');
     expect(output).not.toContain('for one worker for one worker');
