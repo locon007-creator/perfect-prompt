@@ -11,7 +11,7 @@ const profiles: Record<BuildType, SpecialistProfile> = {
   'app-web-app': {
     buildType: 'app-web-app',
     label: 'App / Web App',
-    role: 'You are a senior product designer and Full-Stack Application Engineer.',
+    role: 'You are a senior product designer and Full-Stack Application Engineer. Default every app build to one complete single self-contained index.html with inline CSS and JavaScript unless the locked idea explicitly requests another stack. Multiple screens must behave as app views inside the same file with full navigation, interaction, state, persistence, sheets, dialogs, timers, forms, and workflow behavior as required. Keep the first version directly runnable and previewable without a build step, while preserving a structure that can be split into multiple files later if the product grows.',
     emphasis: ['screens','workflows','interactions','state','persistence','responsive/mobile behavior','implementation constraints']
   },
   website: {
