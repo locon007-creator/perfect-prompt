@@ -143,6 +143,30 @@ const removeProductEcho = (features: readonly string[], lock: IdeaLock) => featu
   return value !== normalized(lock.appName) && value !== normalized(lock.primaryJob);
 });
 
+const imperativeLead = /^(?:Set up|Allow|Add|Show|Organize|Track|Record|Use|Create|Manage|Calculate|Display|Save|Provide|Keep|Require|Mark|Enter|Review|Automatically|Open|Update|Edit|Delete|Remove|Maintain|Support|Navigate|Start|Finish|Complete)\b/i;
+const normalizeCoreInstruction = (feature: string) => {
+  let value = clean(feature)
+    .replace(/^Record\s+(Add|Show|Allow|Use|Provide|Create|Manage|Track|Calculate|Save)\b/i, '$1')
+    .replace(/^Help\s+the\s+user\s+set\s+up\s+/i, 'Set up ')
+    .replace(/^Then\s+make\s+(.+?)\s+mostly\s+automatic\s+with\s+(.+)$/i, 'Automate $1 with $2')
+    .replace(/^Then\s+make\s+(.+?)\s+automatic\s+with\s+(.+)$/i, 'Automate $1 with $2');
+  if (/^Recurring\s+.+\bonce$/i.test(value)) value = `Set up ${value[0].toLowerCase()}${value.slice(1)}`;
+  if (/^Payment\s+amounts?$/i.test(value)) value = `Record ${value[0].toLowerCase()}${value.slice(1)}`;
+  if (!imperativeLead.test(value)) value = `Provide ${value[0].toLowerCase()}${value.slice(1)}`;
+  return clean(value);
+};
+const isStateOwnedFeature = (feature: string, states: readonly string[]) => {
+  const lower = feature.toLowerCase();
+  if (!/(actual amount|confirmation when necessary|re-enter|scheduled income|scheduled bill)/i.test(lower)) return false;
+  return states.some(state => /(actual amount|confirmation when necessary|re-enter|scheduled income|scheduled bill)/i.test(state));
+};
+const normalizeCoreFeatures = (features: readonly string[], states: readonly string[]) => unique(
+  features
+    .filter(feature => !isStateOwnedFeature(feature, states))
+    .map(normalizeCoreInstruction)
+    .filter(Boolean)
+);
+
 const sanitizeRole = (role: string) => role.replace(/([.!?]\s+)You are\s+/g, '$1Also act as ');
 const conciseRole = (role: string, buildType?: BuildType) => {
   const sanitized = sanitizeRole(role);
@@ -202,9 +226,11 @@ export function compile(raw: string, options: GenerateOptions = {}): Prompt {
   const inferred = options.buildType === 'app-web-app'
     ? inferMinimumViableProduct(raw, lock, options.creationFormat || 'idea-decides')
     : { features: [], screens: [], states: [] };
-  const features = inferred.features.length
+  const states = unique([...lock.stateRules, ...lock.persistenceRules, ...inferred.states]);
+  const rawFeatures = inferred.features.length
     ? unique([...removeProductEcho(lock.requiredFeatures, lock), ...inferred.features])
     : [...lock.requiredFeatures];
+  const features = normalizeCoreFeatures(rawFeatures, states);
   return {
     ...base,
     role: conciseRole(base.role, options.buildType),
@@ -214,7 +240,7 @@ export function compile(raw: string, options: GenerateOptions = {}): Prompt {
     workflow: lock.workflow,
     screens: unique([...lock.screens, ...inferred.screens]),
     features,
-    states: unique([...lock.stateRules, ...lock.persistenceRules, ...inferred.states]),
+    states,
     constraints: unique([...lock.constraints, ...appBuildConstraints(options.buildType)]),
     doNotAdd: [...lock.explicitExclusions],
   };
