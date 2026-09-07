@@ -216,6 +216,7 @@ const replaceSection = (output: string, name: string, next: string, body: string
   if (endAt < 0) return output;
   return `${output.slice(0, bodyAt)}${body}${output.slice(endAt)}`;
 };
+const sectionBody = (output: string, name: string, next: string) => output.split(`${name}\n\n`)[1]?.split(`\n\n${next}\n\n`)[0] || '';
 const compactLock = (prompt: Prompt) => [
   `Project type: ${getSpecialistProfile(prompt.buildType || 'general').label}`,
   `Creation format: ${prompt.formatLabel}`,
@@ -228,11 +229,15 @@ const compactLock = (prompt: Prompt) => [
 export function assemble(prompt: Prompt) {
   let output = legacy.assemble(prompt);
   output = replaceSection(output, 'Idea Lock', 'Target User', compactLock(prompt));
+  if (prompt.lock.optionalFeatures.length) {
+    const core = sectionBody(output, 'Core Features', 'Interaction & State Rules').trim();
+    const optional = prompt.lock.optionalFeatures.map(item => `Optional: ${sentenceLine(item)}`).join('\n');
+    output = replaceSection(output, 'Core Features', 'Interaction & State Rules', [core, optional].filter(Boolean).join('\n'));
+  }
   if (prompt.states.length) output = replaceSection(output, 'Interaction & State Rules', 'Visual Direction', unique(prompt.states.map(sentenceLine).filter(Boolean)).join('\n'));
   return output;
 }
 
-const sectionBody = (output: string, name: string, next: string) => output.split(`${name}\n\n`)[1]?.split(`\n\n${next}\n\n`)[0] || '';
 const validateCompactLock = (prompt: Prompt, output: string) => {
   for (const fact of compactLock(prompt).split('\n')) if (!output.toLowerCase().includes(fact.toLowerCase())) throw Error(`Locked fact missing: ${fact.split(':')[0]}`);
 };
@@ -247,22 +252,33 @@ const validateWorkflow = (prompt: Prompt, output: string) => {
     from = at + step.length;
   }
 };
+const validateOptional = (prompt: Prompt, output: string) => {
+  const core = sectionBody(output, 'Core Features', 'Interaction & State Rules');
+  const requiredOnly = core.split(/\r?\n/).filter(line => !/^Optional:\s*/i.test(line)).join('\n').toLowerCase();
+  for (const opt of prompt.lock.optionalFeatures) {
+    const marker = `Optional: ${sentenceLine(opt)}`;
+    if (!core.toLowerCase().includes(marker.toLowerCase())) throw Error(`Optional requirement missing: ${opt}`);
+    if (requiredOnly.includes(opt.toLowerCase())) throw Error(`Optional feature promoted: ${opt}`);
+  }
+};
 const validationPrompt = (prompt: Prompt): Prompt => ({
   ...prompt,
   workflow: '',
   features: [],
-  lock: { ...prompt.lock, workflow: '', lockedInstructions: [] },
+  lock: { ...prompt.lock, workflow: '', lockedInstructions: [], optionalFeatures: [] },
 });
 
 export function validateContradictions(prompt: Prompt, output: string) {
   validateCompactLock(prompt, output);
   validateWorkflow(prompt, output);
+  validateOptional(prompt, output);
   return legacy.validateContradictions(validationPrompt(prompt), output);
 }
 
 export function validate(prompt: Prompt, output: string) {
   validateCompactLock(prompt, output);
   validateWorkflow(prompt, output);
+  validateOptional(prompt, output);
   return legacy.validate(validationPrompt(prompt), output);
 }
 
