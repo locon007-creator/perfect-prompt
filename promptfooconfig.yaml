@@ -23,7 +23,7 @@ tests:
       - type: contains
         value: 'reminders'
       - type: contains
-        value: 'Screen Requirements'
+        value: 'Structure Requirements'
       - type: contains
         value: 'Completion Standard'
       - type: javascript
