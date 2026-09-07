@@ -2,6 +2,7 @@ import * as legacy from './compiler-legacy';
 import { getSpecialistProfile, type BuildType } from './intent';
 import type { CreationFormat } from './creation-format';
 import type { VisualStyle } from './visual-style';
+import { inferMinimumViableProduct } from './format-inference';
 
 export const InputSchema = legacy.InputSchema;
 export type Input = import('./compiler-legacy').Input;
@@ -59,7 +60,7 @@ const cleanStructures = (text: string, screens: readonly string[]) => {
   return unique([...screens].filter(screen => !workflowAction.test(clean(screen)) && !behaviorLikeStructure.test(screen)));
 };
 
-const requirementLead = /^(?:when\b|during\b|pressing\b|show\b|allow\b|use\b|provide\b|(?:also\s+)?include\b|[A-Z][A-Za-z0-9 &/+-]{0,48}\s+should\b)/i;
+const requirementLead = /^(?:(?:only\s+)?(?:when\b|during\b|pressing\b|show\b|allow\b|use\b|provide\b|include\b|record\b|save\b|add\b|create\b|mark\b|edit\b|delete\b|remove\b|calculate\b|track\b|set\b|update\b)|(?:also\s+)?include\b|[A-Z][A-Za-z0-9 &/+-]{0,48}\s+should\b)/i;
 const extractNaturalRequirements = (text: string) => sentenceUnits(text)
   .filter(unit => requirementLead.test(unit))
   .filter(unit => !/^(?:no\b|do not\b|don't\b|without\b)/i.test(unit));
@@ -133,6 +134,11 @@ const compactPrimaryJob = (value: string, appName: string) => {
   job = job.replace(new RegExp(`^${escaped}\\s+(?:for|to)\\s+`, 'i'), '').trim();
   return job || clean(value);
 };
+const normalized = (value: string) => clean(value).toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+const removeProductEcho = (features: readonly string[], lock: IdeaLock) => features.filter(feature => {
+  const value = normalized(feature);
+  return value !== normalized(lock.appName) && value !== normalized(lock.primaryJob);
+});
 
 const sanitizeRole = (role: string) => role.replace(/([.!?]\s+)You are\s+/g, '$1Also act as ');
 const conciseRole = (role: string, buildType?: BuildType) => {
@@ -190,6 +196,12 @@ export function parseIdea(raw: string): IdeaLock {
 export function compile(raw: string, options: GenerateOptions = {}): Prompt {
   const base = legacy.compile(raw, options);
   const lock = parseIdea(raw);
+  const inferred = options.buildType === 'app-web-app'
+    ? inferMinimumViableProduct(raw, lock, options.creationFormat || 'idea-decides')
+    : { features: [], screens: [], states: [] };
+  const features = inferred.features.length
+    ? unique([...removeProductEcho(lock.requiredFeatures, lock), ...inferred.features])
+    : [...lock.requiredFeatures];
   return {
     ...base,
     role: conciseRole(base.role, options.buildType),
@@ -197,9 +209,9 @@ export function compile(raw: string, options: GenerateOptions = {}): Prompt {
     lock,
     targetUser: lock.targetUser,
     workflow: lock.workflow,
-    screens: [...lock.screens],
-    features: [...lock.requiredFeatures],
-    states: [...lock.stateRules, ...lock.persistenceRules],
+    screens: unique([...lock.screens, ...inferred.screens]),
+    features,
+    states: unique([...lock.stateRules, ...lock.persistenceRules, ...inferred.states]),
     constraints: unique([...lock.constraints, ...appBuildConstraints(options.buildType)]),
     doNotAdd: [...lock.explicitExclusions],
   };
