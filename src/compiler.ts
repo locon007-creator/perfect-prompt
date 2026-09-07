@@ -23,6 +23,8 @@ const purposeLead=/^(?:recording|tracking|managing|organizing|saving|calculating
 const unique=(items:string[])=>items.filter((item,index)=>items.findIndex(other=>other.toLowerCase()===item.toLowerCase())===index);
 const negativeLead=/^(?:do not|don't|without|no)\b/i;
 const stripInlineNegative=(item:string)=>clean(item.replace(/\s+(?:(?:but\s+)?without|with\s+no|but\s+no)\s+.+$/i,''));
+const positiveList=(value:string|undefined)=>unique(list(value).filter(item=>!negativeLead.test(item)).map(stripInlineNegative).filter(Boolean));
+const positiveText=(value:string)=>stripInlineNegative(clean(value));
 const buildLabel=(buildType?:BuildType)=>buildType?getSpecialistProfile(buildType).label:'Unspecified';
 const explicitGamePlatform=(lock:IdeaLock)=>{
  const raw=lock.lockedInstructions.join(' ');
@@ -112,7 +114,7 @@ export function parseIdea(raw:string):IdeaLock {
  const audiencePurpose=(audiencePurposeMatch?.[2]||'').trim();
  const purposeClause=purposeLead.test(forClause)?forClause:audiencePurpose;
  const target=clean(targeted||audienceClause||(!purposeClause&&forClause?forClause:'the intended user'));
- const workflow=clean(section(text,['workflow','flow','steps','process'])||(/\bwhere\s+(?:they|users?|people)\s+(.+?)(?=\.(?!\d)|[!?]|\s+It should|\s+No\b|$)/i.exec(text)?.[1]||''));
+ const workflow=positiveText(section(text,['workflow','flow','steps','process'])||(/\bwhere\s+(?:they|users?|people)\s+(.+?)(?=\.(?!\d)|[!?]|\s+It should|\s+No\b|$)/i.exec(text)?.[1]||''));
  const screenText=section(text,['screens','pages','views'])||[...text.matchAll(/\b([a-z][\w ]*?)\s+screen\b/gi)].map(m=>m[1].replace(/^(?:It should have|it has|include)\s+(?:a|an|the)\s+/i,'')).join(', ');
  const naturalFeatures=(/\bwhere\s+(?:they|users?|people)\s+(.+?)(?=\.(?!\d)|[!?]|\s+It should|\s+No\b|$)/i.exec(text)?.[1]||'').replace(/\b(and|then)\b/gi,',');
  const includeFeatures=(/\b(?:also\s+)?include(?:s|d)?\s+(.+?)(?=\.(?!\d)|[!?]|$)/i.exec(text)?.[1]||'');
@@ -123,11 +125,11 @@ export function parseIdea(raw:string):IdeaLock {
  const requiredText=requiredParts.join(', ');
  const optionalText=section(text,['optional features','optional'])||((/\boptional(?:ly)?\s+(.+?)(?=\.(?!\d)|[!?]|$)/i.exec(text)?.[1])||'');
  const exclusionMatches=[...text.matchAll(/(?:do not|don't|without|no)\s+([^.;,]+)/gi)].map(m=>clean(m[1]));
- const rawRequired=unique(list(requiredText).filter(item=>!negativeLead.test(item)).map(stripInlineNegative).filter(Boolean));const excludedRequired=rawRequired.filter(x=>exclusionMatches.some(e=>x.toLowerCase().includes(e.toLowerCase())||e.toLowerCase().includes(x.toLowerCase())));if(excludedRequired.length)throw Error(`Required feature excluded: ${excludedRequired.join(', ')}`);const required=rawRequired;
- const optional=list(optionalText), duplicates=required.filter(x=>optional.some(y=>y.toLowerCase()===x.toLowerCase()));
+ const rawRequired=positiveList(requiredText);const excludedRequired=rawRequired.filter(x=>exclusionMatches.some(e=>x.toLowerCase().includes(e.toLowerCase())||e.toLowerCase().includes(x.toLowerCase())));if(excludedRequired.length)throw Error(`Required feature excluded: ${excludedRequired.join(', ')}`);const required=rawRequired;
+ const optional=positiveList(optionalText), duplicates=required.filter(x=>optional.some(y=>y.toLowerCase()===x.toLowerCase()));
  if(duplicates.length) throw Error(`Contradictory required and optional feature: ${duplicates.join(', ')}`);
  const persistence=section(text,['persistence','data','storage'])||((/\b(save|store|persist|keep)\s+(.+?)(?=\.(?!\d)|[!?]|$)/i.exec(text)?.[0])||'');
- return freeze({appName:name||clean(product.split(/\s+for\s+/i)[0]),primaryJob:product,targetUser:target,platform,workflow,screens:list(screenText),requiredFeatures:required,optionalFeatures:optional,stateRules:list(section(text,['states','behavior','interactions'])||''),persistenceRules:list(persistence),visualRequirements:list(section(text,['visual','layout','style'])||''),constraints:list(section(text,['constraints','constraint'])||''),explicitExclusions:exclusionMatches,lockedInstructions:[text]});
+ return freeze({appName:name||clean(product.split(/\s+for\s+/i)[0]),primaryJob:product,targetUser:target,platform,workflow,screens:list(screenText),requiredFeatures:required,optionalFeatures:optional,stateRules:positiveList(section(text,['states','behavior','interactions'])||''),persistenceRules:positiveList(persistence),visualRequirements:positiveList(section(text,['visual','layout','style'])||''),constraints:positiveList(section(text,['constraints','constraint'])||''),explicitExclusions:exclusionMatches,lockedInstructions:[text]});
 }
 export function compile(raw:string, options:GenerateOptions={}):Prompt {
  const lock=parseIdea(raw);
