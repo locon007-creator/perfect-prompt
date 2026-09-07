@@ -28,8 +28,11 @@ export function parseIdea(raw:string):IdeaLock {
  const product=clean((/\b(?:build|create|make|design)\s+(?:a|an|the)\s+(.+?)(?=\s+for\s+|\s+where\s+|\s+that\s+|\s+on\s+|\.|$)/i.exec(text)?.[1]||text));
  const targeted=(/\btarget(?:ed)?\s+at\s+([^.;]+?)(?=\s+(?:where|that|on|with|which)\b|[.!?]|$)/i.exec(text)?.[1]||'').trim();
  const forClause=(/\bfor\s+([^.;]+?)(?=\s+(?:where|that|on|with|which)\b|[.!?]|$)/i.exec(text)?.[1]||'').trim();
- const purposeClause=purposeLead.test(forClause)?forClause:'';
- const target=clean(targeted||(!purposeClause&&forClause?forClause:'the intended user'));
+ const audiencePurposeMatch=/^(.+?)\s+(?:to|who|that)\s+(.+)$/i.exec(forClause);
+ const audienceClause=(audiencePurposeMatch?.[1]||'').trim();
+ const audiencePurpose=(audiencePurposeMatch?.[2]||'').trim();
+ const purposeClause=purposeLead.test(forClause)?forClause:audiencePurpose;
+ const target=clean(targeted||audienceClause||(!purposeClause&&forClause?forClause:'the intended user'));
  const workflow=clean(section(text,['workflow','flow','steps','process'])||(/\bwhere\s+(?:they|users?|people)\s+(.+?)(?=\.(?!\d)|[!?]|\s+It should|\s+No\b|$)/i.exec(text)?.[1]||''));
  const screenText=section(text,['screens','pages','views'])||[...text.matchAll(/\b([a-z][\w ]*?)\s+screen\b/gi)].map(m=>m[1].replace(/^(?:It should have|it has|include)\s+(?:a|an|the)\s+/i,'')).join(', ');
  const naturalFeatures=(/\bwhere\s+(?:they|users?|people)\s+(.+?)(?=\.(?!\d)|[!?]|\s+It should|\s+No\b|$)/i.exec(text)?.[1]||'').replace(/\b(and|then)\b/gi,',');
