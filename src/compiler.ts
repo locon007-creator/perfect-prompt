@@ -37,6 +37,7 @@ const stripNegativeLead = (value: string) => value
   .replace(/^no\s+/i, '')
   .replace(/^(?:a|an|the)\s+/i, '')
   .trim();
+const stripInlineNegative = (value: string) => clean(value.replace(/\s*(?:[.;]\s*)?(?:(?:but\s+)?without|with\s+no|but\s+no|do not|don't|no)\s+.+$/i, ''));
 
 const extractExclusions = (text: string) => {
   const found: string[] = [];
@@ -110,7 +111,10 @@ const extractExtraStates = (text: string) => unique([
 const extractMobileConstraints = (text: string) => {
   const found: string[] = [];
   for (const unit of sentenceUnits(text)) {
-    if (/^Target\b/i.test(unit) || /^Keep\s+it\s+strictly\b/i.test(unit)) found.push(clean(unit));
+    if (/^Target\b/i.test(unit) || /^Keep\s+it\s+strictly\b/i.test(unit)) {
+      const safe = stripInlineNegative(unit);
+      if (safe) found.push(safe);
+    }
     const match = /\b(?:optimized|designed)\s+for\s+(\d+\s*[–-]\s*\d+\s*px[^,.;]*?(?:large|thumb|touch)[^,.;]*?targets?)/i.exec(unit);
     if (match?.[1]) found.push(`Keep the interface optimized for ${clean(match[1])}`);
   }
