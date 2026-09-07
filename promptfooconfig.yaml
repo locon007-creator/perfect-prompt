@@ -6,16 +6,16 @@ providers:
 tests:
   - description: structured output and fidelity
     vars:
-      idea: 'Build a habit tracker for students on Android. Workflow: add habit, mark complete, view streak. Screens: Habits, Streaks. Required features: habit tracking. No social feed.'
+      idea: 'Build a Generic Task Manager for busy people on Android. Workflow: add task, complete task, review list. Screens: Tasks, Review. Required features: task entry. No reminders.'
     assert:
       - type: contains
         value: 'Primary job'
       - type: contains
         value: 'Main Workflow'
       - type: contains
-        value: 'habit tracking'
+        value: 'task entry'
       - type: contains
-        value: 'social feed'
+        value: 'reminders'
       - type: contains
         value: 'Screen Requirements'
       - type: contains
