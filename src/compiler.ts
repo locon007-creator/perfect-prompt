@@ -45,6 +45,7 @@ const extractWorkflow=(text:string)=>{
  if(nextLine)return positiveText(nextLine);
  return positiveText(section(text,['main workflow','workflow','flow','steps','process'])||(/\bwhere\s+(?:they|users?|people)\s+(.+?)(?=\.(?!\d)|[!?]|\s+It should|\s+No\b|$)/i.exec(text)?.[1]||''));
 };
+const transientWorkflowAction=/^(?:punch\s+(?:in|out)|start\s+(?:work|shift)|end\s+(?:work|shift)|save|submit|continue|cancel|finish|complete|confirm)$/i;
 const extractStructures=(text:string,workflow:string)=>{
  const explicitSection=section(text,['screens','pages','views']);
  if(explicitSection)return positiveList(explicitSection);
@@ -58,7 +59,7 @@ const extractStructures=(text:string,workflow:string)=>{
    .trim();
   if(value){explicitMentions.push(value);found.push(value);}
  }
- if(explicitMentions.length<2)for(const stage of workflow.split(/→|->|,|;|\bthen\b/gi).map(clean).filter(Boolean))found.push(stage);
+ if(explicitMentions.length<2)for(const stage of workflow.split(/→|->|,|;|\bthen\b/gi).map(clean).filter(Boolean))if(!transientWorkflowAction.test(stage))found.push(stage);
  for(const unit of sentenceUnits(text)){
   const subject=/^([A-Z][A-Za-z0-9 &/+-]{0,48}?)\s+should\b/.exec(unit)?.[1]?.trim();
   if(subject && !/^(?:the app|the site|the game|the product|it)$/i.test(subject))found.push(subject);
@@ -73,13 +74,13 @@ const extractStructures=(text:string,workflow:string)=>{
  }
  return unique(found.map(x=>clean(x)).filter(Boolean));
 };
-const requirementSentence=/^(?:when\b|show\b|allow\b|use\b|(?:also\s+)?include\b|[A-Z][A-Za-z0-9 &/+-]{0,48}\s+should\b)/i;
+const requirementSentence=/^(?:when\b|during\b|show\b|allow\b|use\b|(?:also\s+)?include\b|[A-Z][A-Za-z0-9 &/+-]{0,48}\s+should\b)/i;
 const extractNaturalRequirements=(text:string)=>sentenceUnits(text)
  .filter(unit=>requirementSentence.test(unit))
  .map(positiveText)
  .filter(unit=>unit && !negativeLead.test(unit));
 const extractNaturalStates=(text:string)=>sentenceUnits(text)
- .filter(unit=>/^when\b/i.test(unit))
+ .filter(unit=>/^(?:when|during)\b/i.test(unit))
  .map(positiveText).filter(Boolean);
 const extractPersistence=(text:string)=>{
  const explicit=section(text,['persistence','data','storage']);
@@ -182,9 +183,34 @@ const featureContext=(features:string[])=>{
  const match=/^(?:recording|tracking|logging|saving|capturing)\s+(.+?)\s+start$/i.exec(first);
  return match?.[1]?.trim()||'';
 };
-const featureLine=(feature:string,features:string[])=>{
- const raw=clean(feature);
+const featureLine=(feature:string,features:string[],workflow='')=>{
+ let raw=clean(feature);
  const context=featureContext(features);
+ raw=raw.replace(/^one main job:\s*/i,'').trim();
+ if(/^make it\s+(?:fast|easy|simple|quick|clear)(?:\b.*)?$/i.test(raw))return'';
+ raw=raw.replace(/^easy to\s+/i,'').trim();
+ const subjectRequirement=/^[A-Z][A-Za-z0-9 &/+-]{0,48}\s+should\s+(.+)$/i.exec(raw);
+ if(subjectRequirement)raw=subjectRequirement[1].trim();
+ const during=/^During\s+(.+?),\s*show\s+(.+)$/i.exec(raw);
+ if(during){
+  const object=during[2].replace(/^a real live\s+/i,'a live ').trim();
+  if(/elapsed timer/i.test(object)&&/active shift/i.test(during[1]))return sentenceLine(`Show ${object.replace(/elapsed timer/i,'elapsed shift timer')}`);
+  return sentenceLine(`Show ${object} during ${during[1]}`);
+ }
+ const when=/^When\s+(.+?),\s*(?:automatically\s+)?(.+)$/i.exec(raw);
+ if(when){
+  const consequence=when[2].trim();
+  if(/calculate total hours worked/i.test(consequence)&&/save (?:the day|the entry)/i.test(consequence))return'Calculate and save total daily worked hours.';
+  return sentenceLine(consequence);
+ }
+ if(/^punch in$/i.test(raw))return /Punch In\s*→\s*Active Shift/i.test(workflow)?'Punch in to start a work shift.':'Punch in.';
+ if(/^punch out$/i.test(raw))return /Active Shift\s*→\s*Punch Out/i.test(workflow)?'Punch out to end the active shift.':'Punch out.';
+ if(/^see\s+(.+)/i.test(raw))return sentenceLine(`Show ${raw.replace(/^see\s+/i,'')}`);
+ const history=/^(?:Include|Provide)\s+History\s+so\s+(.+)$/i.exec(raw);
+ if(history&&/previous workdays can be reviewed and edited/i.test(history[1]))return'Provide History for reviewing and editing previous workdays.';
+ const timeFormat=/^Allow the user to set their preferred time format$/i.exec(raw);
+ if(timeFormat)return'Allow the user to choose their preferred time format.';
+ if(/^(?:show|include|provide|allow|use|save|persist|track|record|calculate|set|assign)\b/i.test(raw))return sentenceLine(raw);
  const gerund=/^([a-z]+)\s+(.+)$/i.exec(raw);
  if(gerund&&gerundActions[gerund[1].toLowerCase()]){
   let object=gerund[2];
@@ -202,8 +228,50 @@ const featureLine=(feature:string,features:string[])=>{
 const canonical=(value:string)=>value.toLowerCase()
  .replace(/\brecording\b/g,'record').replace(/\btracking\b/g,'track').replace(/\bsaving\b/g,'save')
  .replace(/\bcalculating\b/g,'calculate').replace(/\blogging\b/g,'log').replace(/\borganizing\b/g,'organize')
+ .replace(/\bworked\b/g,'work').replace(/\bdaily\b/g,'day')
  .replace(/[^a-z0-9]+/g,' ').trim();
-const requirementCovered=(required:string,sectionText:string)=>canonical(sectionText).includes(canonical(required));
+const conceptStop=new Set(['a','an','the','to','for','with','using','so','can','be','is','are','of','on','all','one','main','job','make','fast','easy','simple','real','large','preferred','should','automatically','user','worker','include','provide','show','display','allow','set']);
+const conceptTokens=(value:string)=>canonical(value).split(' ').filter(token=>token&&!conceptStop.has(token));
+const semanticallyCovered=(required:string,sectionText:string)=>{
+ const requiredTokens=conceptTokens(required);
+ if(!requiredTokens.length)return true;
+ const sectionTokens=new Set(conceptTokens(sectionText));
+ return requiredTokens.every(token=>sectionTokens.has(token));
+};
+const requirementCovered=(required:string,sectionText:string)=>canonical(sectionText).includes(canonical(required))||semanticallyCovered(required,sectionText);
+const dedupeSemanticLines=(lines:string[])=>{
+ const cleaned=unique(lines.filter(Boolean));
+ return cleaned.filter((line,index)=>{
+  const tokens=conceptTokens(line);
+  if(tokens.length<2)return true;
+  return !cleaned.some((other,otherIndex)=>{
+   if(otherIndex===index||other.length<=line.length)return false;
+   const otherTokens=new Set(conceptTokens(other));
+   return tokens.every(token=>otherTokens.has(token));
+  });
+ });
+};
+const combineWeeklyView=(lines:string[])=>{
+ const viewIndex=lines.findIndex(line=>/weekly view/i.test(line)&&/workweek/i.test(line));
+ const totalIndex=lines.findIndex(line=>/each day/i.test(line)&&/weekly total/i.test(line));
+ if(viewIndex<0||totalIndex<0||viewIndex===totalIndex)return lines;
+ const workweek=/using a\s+(.+?)\s+workweek/i.exec(lines[viewIndex])?.[1]||'weekly';
+ const combined=`Show a ${workweek} Weekly view with daily hours and the weekly total.`;
+ return lines.filter((_,index)=>index!==viewIndex&&index!==totalIndex).concat(combined);
+};
+const semanticFeatureLines=(features:string[],workflow:string,constraints:string[])=>{
+ const rawLines=features
+  .filter(feature=>!constraints.some(constraint=>canonical(feature)===canonical(constraint)))
+  .map(feature=>featureLine(feature,features,workflow))
+  .filter(Boolean);
+ const firstPass=dedupeSemanticLines(rawLines);
+ return dedupeSemanticLines(combineWeeklyView(firstPass));
+};
+const semanticRequirementCovered=(required:string,core:string,states:string,features:string[],workflow:string)=>{
+ const normalized=featureLine(required,features,workflow);
+ if(!normalized)return true;
+ return requirementCovered(normalized,core)||requirementCovered(required,core)||requirementCovered(required,states);
+};
 const visualLines=(visual:string)=>compactLines(visual.split(';').map(x=>x.trim()).filter(Boolean));
 const audienceLines=(target:string)=>target.toLowerCase()==='the intended user'
  ? ['Primary audience: the intended user.','Do not invent a more specific persona unless the locked idea provides one.']
@@ -270,7 +338,8 @@ export function compile(raw:string, options:GenerateOptions={}):Prompt {
  return {buildType:options.buildType,creationFormat:options.creationFormat,formatLabel:formatProfile.label,formatGuidance:[...formatProfile.guidance],role,mission:missionFor(lock,options.buildType),lock,targetUser:lock.targetUser,platform:effectivePlatform(lock,options.buildType,options.creationFormat),workflow:lock.workflow,screens:[...lock.screens],features:[...lock.requiredFeatures],states:[...lock.stateRules,...lock.persistenceRules],visual,quality,constraints:[...lock.constraints],doNotAdd:[...lock.explicitExclusions],completion:completionFor(options.buildType)};
 }
 export function assemble(p:Prompt){
- const core=p.features.length?unique(p.features.map(x=>featureLine(x,p.features))).join('\n'):'Only features explicitly stated or directly required by the locked idea.';
+ const coreLines=semanticFeatureLines(p.features,p.workflow,p.constraints);
+ const core=coreLines.length?coreLines.join('\n'):'Only features explicitly stated or directly required by the locked idea.';
  const states=p.states.length?p.states.join('\n'):stateFallback(p.buildType);
  const quality=p.quality.length?compactLines(p.quality).join('\n'):'Follow only build-quality, branding, and motion requirements explicitly stated in the idea.';
  const constraints=p.constraints.length?compactLines(p.constraints).join('\n'):'Follow only constraints explicitly stated in the locked idea.';
@@ -279,17 +348,17 @@ export function assemble(p:Prompt){
  const visual=p.visual?visualLines(p.visual).join('\n'):'Follow only visual requirements stated in the idea.';
  return ['Role',p.role,'Product Mission',p.mission,'Idea Lock',`Project type: ${buildLabel(p.buildType)}\nCreation format: ${p.formatLabel}\nProject name: ${p.lock.appName}\nPrimary job: ${p.lock.primaryJob}\nTarget user: ${p.lock.targetUser}\nPlatform / medium: ${p.platform}\nLocked instruction: ${p.lock.lockedInstructions.join(' ')}`,'Target User',audienceLines(p.targetUser).join('\n'),'Platform',platformLines(p.platform,p.formatLabel,p.formatGuidance).join('\n'),'Main Workflow',p.workflow||workflowFallback(p.buildType),'Structure Requirements',structure,'Core Features',core,'Interaction & State Rules',states,'Visual Direction',visual,'Build Quality & Brand Experience',quality,'Constraints',constraints,'Do Not Add',doNotAdd,'Completion Standard',p.completion].join('\n\n');
 }
-export function validateContradictions(p:Prompt,output:string){const lock=p.lock, lower=output.toLowerCase(); const workflow=output.split('Main Workflow')[1]?.split('Structure Requirements')[0]||''; const structures=output.split('Structure Requirements')[1]?.split('Core Features')[0]||''; const core=output.split('Core Features')[1]?.split('Interaction & State Rules')[0]||''; const optional=lock.optionalFeatures.join(' ').toLowerCase();
+export function validateContradictions(p:Prompt,output:string){const lock=p.lock, lower=output.toLowerCase(); const workflow=output.split('Main Workflow')[1]?.split('Structure Requirements')[0]||''; const structures=output.split('Structure Requirements')[1]?.split('Core Features')[0]||''; const core=output.split('Core Features')[1]?.split('Interaction & State Rules')[0]||''; const states=output.split('Interaction & State Rules')[1]?.split('Visual Direction')[0]||''; const optional=lock.optionalFeatures.join(' ').toLowerCase();
  if(lock.workflow && !workflow.toLowerCase().includes(lock.workflow.toLowerCase())) throw Error('Workflow altered or missing');
  let cursor=-1; for(const step of lock.workflow.split(/→|->|,|;|\band\b|\bthen\b/gi).map(clean).filter(Boolean)){const at=workflow.toLowerCase().indexOf(step.toLowerCase());if(at<cursor)throw Error('Workflow reordered');if(at>=0)cursor=at;else throw Error(`Workflow step missing: ${step}`);}
  for(const screen of lock.screens)if(!structures.toLowerCase().includes(screen.toLowerCase()))throw Error(`Required structure missing: ${screen}`);
  const listed=[...structures.matchAll(/(?:^|\n)\s*\d+\.\s*([^\n]+)/g)].map(m=>clean(m[1])); const allowed=[...lock.screens,...lock.workflow.split(/→|->|,|;|\band\b|\bthen\b/gi).map(clean)]; for(const item of listed)if(!allowed.some(x=>x.toLowerCase()===item.toLowerCase()))throw Error(`Invented structure: ${item}`);
  const platformSection=output.split('Platform')[1]?.split('Main Workflow')[0]||'';if(!platformSection.includes(p.platform))throw Error('Platform conflict');
  for(const req of lock.persistenceRules)if(!lower.includes(req.toLowerCase()))throw Error(`Persistence requirement missing: ${req}`);
- for(const req of lock.requiredFeatures){if(lock.explicitExclusions.some(x=>x.toLowerCase().includes(req.toLowerCase())||req.toLowerCase().includes(x.toLowerCase())))throw Error(`Required feature excluded: ${req}`);if(optional.includes(req.toLowerCase()))throw Error(`Required feature optional: ${req}`);if(!requirementCovered(req,core))throw Error(`Required feature missing: ${req}`);}
+ for(const req of lock.requiredFeatures){if(lock.explicitExclusions.some(x=>x.toLowerCase().includes(req.toLowerCase())||req.toLowerCase().includes(x.toLowerCase())))throw Error(`Required feature excluded: ${req}`);if(optional.includes(req.toLowerCase()))throw Error(`Required feature optional: ${req}`);if(!semanticRequirementCovered(req,core,states,p.features,p.workflow))throw Error(`Required feature missing: ${req}`);}
  for(const opt of lock.optionalFeatures)if(core.toLowerCase().includes(opt.toLowerCase()))throw Error(`Optional feature promoted: ${opt}`);
  for(const x of lock.explicitExclusions)if([workflow,structures,core].join(' ').toLowerCase().includes(x.toLowerCase()))throw Error(`Exclusion violation: ${x}`);
  for(const x of lock.lockedInstructions)if(!lower.includes(x.toLowerCase()))throw Error('Locked instruction contradicted');
  return true;}
-export function validate(p:Prompt,output:string){const sections=['Role','Product Mission','Idea Lock','Target User','Platform','Main Workflow','Structure Requirements','Core Features','Interaction & State Rules','Visual Direction','Build Quality & Brand Experience','Constraints','Do Not Add','Completion Standard'];const missing=sections.filter(x=>!output.includes(x));if(missing.length)throw Error(`Missing sections: ${missing.join(', ')}`);const positive=[p.workflow,...p.screens,...p.features,...p.states,p.visual,...p.constraints].join(' ').toLowerCase();for(const x of p.lock.explicitExclusions)if(positive.includes(x.toLowerCase()))throw Error(`Exclusion violation: ${x}`);const core=output.split('Core Features')[1]?.split('Interaction & State Rules')[0]||'';for(const x of p.lock.requiredFeatures)if(!requirementCovered(x,core))throw Error(`Missing locked requirement: ${x}`);return validateContradictions(p,output);}
+export function validate(p:Prompt,output:string){const sections=['Role','Product Mission','Idea Lock','Target User','Platform','Main Workflow','Structure Requirements','Core Features','Interaction & State Rules','Visual Direction','Build Quality & Brand Experience','Constraints','Do Not Add','Completion Standard'];const missing=sections.filter(x=>!output.includes(x));if(missing.length)throw Error(`Missing sections: ${missing.join(', ')}`);const positive=[p.workflow,...p.screens,...p.features,...p.states,p.visual,...p.constraints].join(' ').toLowerCase();for(const x of p.lock.explicitExclusions)if(positive.includes(x.toLowerCase()))throw Error(`Exclusion violation: ${x}`);const core=output.split('Core Features')[1]?.split('Interaction & State Rules')[0]||'';const states=output.split('Interaction & State Rules')[1]?.split('Visual Direction')[0]||'';for(const x of p.lock.requiredFeatures)if(!semanticRequirementCovered(x,core,states,p.features,p.workflow))throw Error(`Missing locked requirement: ${x}`);return validateContradictions(p,output);}
 export const generate=(raw:string,options:GenerateOptions={})=>{const p=compile(raw,options),out=assemble(p);validate(p,out);return out;};
