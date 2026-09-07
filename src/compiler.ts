@@ -143,30 +143,6 @@ const removeProductEcho = (features: readonly string[], lock: IdeaLock) => featu
   return value !== normalized(lock.appName) && value !== normalized(lock.primaryJob);
 });
 
-const imperativeLead = /^(?:Set up|Allow|Add|Show|Organize|Track|Record|Use|Create|Manage|Calculate|Display|Save|Provide|Keep|Require|Mark|Enter|Review|Automatically|Open|Update|Edit|Delete|Remove|Maintain|Support|Navigate|Start|Finish|Complete)\b/i;
-const normalizeCoreInstruction = (feature: string) => {
-  let value = clean(feature)
-    .replace(/^Record\s+(Add|Show|Allow|Use|Provide|Create|Manage|Track|Calculate|Save)\b/i, '$1')
-    .replace(/^Help\s+the\s+user\s+set\s+up\s+/i, 'Set up ')
-    .replace(/^Then\s+make\s+(.+?)\s+mostly\s+automatic\s+with\s+(.+)$/i, 'Automate $1 with $2')
-    .replace(/^Then\s+make\s+(.+?)\s+automatic\s+with\s+(.+)$/i, 'Automate $1 with $2');
-  if (/^Recurring\s+.+\bonce$/i.test(value)) value = `Set up ${value[0].toLowerCase()}${value.slice(1)}`;
-  if (/^Payment\s+amounts?$/i.test(value)) value = `Record ${value[0].toLowerCase()}${value.slice(1)}`;
-  if (!imperativeLead.test(value)) value = `Provide ${value[0].toLowerCase()}${value.slice(1)}`;
-  return clean(value);
-};
-const isStateOwnedFeature = (feature: string, states: readonly string[]) => {
-  const lower = feature.toLowerCase();
-  if (!/(actual amount|confirmation when necessary|re-enter|scheduled income|scheduled bill)/i.test(lower)) return false;
-  return states.some(state => /(actual amount|confirmation when necessary|re-enter|scheduled income|scheduled bill)/i.test(state));
-};
-const normalizeCoreFeatures = (features: readonly string[], states: readonly string[]) => unique(
-  features
-    .filter(feature => !isStateOwnedFeature(feature, states))
-    .map(normalizeCoreInstruction)
-    .filter(Boolean)
-);
-
 const sanitizeRole = (role: string) => role.replace(/([.!?]\s+)You are\s+/g, '$1Also act as ');
 const conciseRole = (role: string, buildType?: BuildType) => {
   const sanitized = sanitizeRole(role);
@@ -226,11 +202,9 @@ export function compile(raw: string, options: GenerateOptions = {}): Prompt {
   const inferred = options.buildType === 'app-web-app'
     ? inferMinimumViableProduct(raw, lock, options.creationFormat || 'idea-decides')
     : { features: [], screens: [], states: [] };
-  const states = unique([...lock.stateRules, ...lock.persistenceRules, ...inferred.states]);
-  const rawFeatures = inferred.features.length
+  const features = inferred.features.length
     ? unique([...removeProductEcho(lock.requiredFeatures, lock), ...inferred.features])
     : [...lock.requiredFeatures];
-  const features = normalizeCoreFeatures(rawFeatures, states);
   return {
     ...base,
     role: conciseRole(base.role, options.buildType),
@@ -240,7 +214,7 @@ export function compile(raw: string, options: GenerateOptions = {}): Prompt {
     workflow: lock.workflow,
     screens: unique([...lock.screens, ...inferred.screens]),
     features,
-    states,
+    states: unique([...lock.stateRules, ...lock.persistenceRules, ...inferred.states]),
     constraints: unique([...lock.constraints, ...appBuildConstraints(options.buildType)]),
     doNotAdd: [...lock.explicitExclusions],
   };
@@ -277,6 +251,28 @@ const compactQuality = (output: string) => {
   const guard = lines.find(line => /generic template|placeholder styling|stock component/i.test(line));
   return unique([...lines.slice(0, 3), ...(guard ? [guard] : [lines[3]])]).slice(0, 4).join('\n');
 };
+const stateOwnedCoreLine = (line: string, states: readonly string[]) => {
+  if (!/(actual amount|confirmation when necessary|re-enter|scheduled income|scheduled bill)/i.test(line)) return false;
+  return states.some(state => /(actual amount|confirmation when necessary|re-enter|scheduled income|scheduled bill)/i.test(state));
+};
+const polishCoreLine = (line: string) => {
+  let value = line.trim();
+  value = value.replace(/^Record\s+Add\s+/i, 'Add ');
+  value = value.replace(/^Help\s+the\s+user\s+set\s+up\s+/i, "Set up the user's ");
+  value = value.replace(/^Recurring monthly bills once\.?$/i, 'Set up recurring monthly bills once and reuse their saved schedules.');
+  value = value.replace(/^Then make (.+?) mostly automatic with (.+?)\.?$/i, 'Manage $1 automatically with $2.');
+  value = value.replace(/^Then make (.+?) automatic with (.+?)\.?$/i, 'Manage $1 automatically with $2.');
+  return value;
+};
+const polishCore = (output: string, prompt: Prompt) => unique(
+  sectionBody(output, 'Core Features', 'Interaction & State Rules')
+    .split(/\r?\n/)
+    .map(line => line.trim())
+    .filter(Boolean)
+    .filter(line => !stateOwnedCoreLine(line, prompt.states))
+    .map(polishCoreLine)
+    .filter(Boolean)
+).join('\n');
 const completionFor = (prompt: Prompt) => {
   if (prompt.buildType !== 'app-web-app') return prompt.completion;
   return prompt.lock.workflow
@@ -293,6 +289,7 @@ export function assemble(prompt: Prompt) {
     output = replaceSection(output, 'Core Features', 'Interaction & State Rules', [core, optional].filter(Boolean).join('\n'));
   }
   if (prompt.states.length) output = replaceSection(output, 'Interaction & State Rules', 'Visual Direction', unique(prompt.states.map(sentenceLine).filter(Boolean)).join('\n'));
+  output = replaceSection(output, 'Core Features', 'Interaction & State Rules', polishCore(output, prompt));
   output = replaceSection(output, 'Build Quality & Brand Experience', 'Constraints', compactQuality(output));
   output = replaceTailSection(output, 'Completion Standard', completionFor(prompt));
   return output;
