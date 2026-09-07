@@ -57,6 +57,11 @@ const explicitStructureHeading = (text: string) => /(?:^|\n)\s*(?:screens|pages|
 const workflowAction = /^(?:punch\s+(?:in|out)|start\s+my\s+day|start\s+route|day\s+complete|finish\s+day|start\s+(?:work|shift)|end\s+(?:work|shift)|save|submit|continue|cancel|finish|complete|confirm)$/i;
 const behaviorLikeStructure = /\b(?:opens?|shows?|allows?|pressing|tapping|tap|clicking|use|provide)\b/i;
 const settingsOptionStructure = /^(?:theme(?:\s+with\s+.*)?|light|dark|automatic|auto|time\s*format|date\s*format|payment preferences?)$/i;
+const workflowViews = (workflow: string) => workflow
+  .split(/→|->|,|;|\band\b|\bthen\b/gi)
+  .map(clean)
+  .filter(Boolean)
+  .filter(step => !workflowAction.test(step) && !behaviorLikeStructure.test(step) && !settingsOptionStructure.test(step));
 const cleanStructures = (text: string, screens: readonly string[]) => {
   if (explicitStructureHeading(text)) return unique([...screens].filter(screen => !settingsOptionStructure.test(clean(screen))));
   return unique([...screens].filter(screen => !workflowAction.test(clean(screen)) && !behaviorLikeStructure.test(screen) && !settingsOptionStructure.test(clean(screen))));
@@ -248,11 +253,14 @@ export function compile(raw: string, options: GenerateOptions = {}): PromptWithS
   const inferred = options.buildType === 'app-web-app'
     ? inferMinimumViableProduct(raw, lock, options.creationFormat || 'idea-decides')
     : { features: [], screens: [], states: [] };
-  const features = inferred.features.length
+  const features = options.buildType === 'app-web-app'
     ? unique([...removeProductEcho(lock.requiredFeatures, lock), ...inferred.features])
-    : [...lock.requiredFeatures];
+    : inferred.features.length
+      ? unique([...removeProductEcho(lock.requiredFeatures, lock), ...inferred.features])
+      : [...lock.requiredFeatures];
   const explicitSettings = extractExplicitSettings(raw);
   const settings = explicitSettings.length ? explicitSettings : options.buildType === 'app-web-app' ? inferSettings(raw, options.creationFormat) : [];
+  const blueprintScreens = options.buildType === 'app-web-app' ? workflowViews(lock.workflow) : [];
   return {
     ...base,
     role: conciseRole(base.role, options.buildType),
@@ -260,7 +268,7 @@ export function compile(raw: string, options: GenerateOptions = {}): PromptWithS
     lock,
     targetUser: lock.targetUser,
     workflow: lock.workflow,
-    screens: unique([...lock.screens, ...inferred.screens]).filter(screen => !settingsOptionStructure.test(clean(screen))),
+    screens: unique([...lock.screens, ...blueprintScreens, ...inferred.screens]).filter(screen => !settingsOptionStructure.test(clean(screen))),
     features,
     states: unique([...lock.stateRules, ...lock.persistenceRules, ...inferred.states]),
     constraints: unique([...lock.constraints, ...appBuildConstraints(options.buildType)]),
@@ -354,7 +362,7 @@ export function assemble(prompt: PromptWithSettings) {
   if (prompt.states.length) output = replaceSection(output, 'Interaction & State Rules', 'Visual Direction', unique(prompt.states.map(sentenceLine).filter(Boolean)).join('\n'));
   output = replaceSection(output, 'Core Features', 'Interaction & State Rules', polishCore(output, prompt));
   output = replaceSection(output, 'Build Quality & Brand Experience', 'Constraints', compactQuality(output));
-  if (prompt.settings?.length) output = insertBeforeSection(output, 'Completion Standard', 'Settings', unique(prompt.settings.map(sentenceLine).filter(Boolean)).join('\n'));
+  if (prompt.settings?.length) output = insertBeforeSection(output, 'Visual Direction', 'Settings', unique(prompt.settings.map(sentenceLine).filter(Boolean)).join('\n'));
   output = replaceTailSection(output, 'Completion Standard', completionFor(prompt));
   return output;
 }

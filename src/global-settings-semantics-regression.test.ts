@@ -9,7 +9,7 @@ describe('global settings semantics', () => {
   test('explicit settings stay in a dedicated Settings section and out of Structure Requirements', () => {
     const output = generate(financeIdea, { buildType: 'app-web-app', creationFormat: 'ios-app', visualStyle: 'premium-modern' });
     const structure = section(output, 'Structure Requirements', 'Core Features').toLowerCase();
-    const settings = section(output, 'Settings', 'Completion Standard').toLowerCase();
+    const settings = section(output, 'Settings', 'Visual Direction').toLowerCase();
     expect(settings).toContain('theme');
     expect(settings).toContain('light');
     expect(settings).toContain('dark');
@@ -34,7 +34,7 @@ describe('global settings semantics', () => {
 
   test('format-aware inferred settings stay small and product-relevant', () => {
     const output = generate('Build a personal timesheet app for one worker. Track punch in, punch out, daily hours, and weekly totals. Save data locally.', { buildType: 'app-web-app', creationFormat: 'multi-screen-app', visualStyle: 'premium-modern' });
-    const settings = section(output, 'Settings', 'Completion Standard');
+    const settings = section(output, 'Settings', 'Visual Direction');
     const lines = settings.split(/\r?\n/).map(line => line.trim()).filter(Boolean);
     expect(lines.length).toBeGreaterThanOrEqual(1);
     expect(lines.length).toBeLessThanOrEqual(4);
@@ -43,7 +43,7 @@ describe('global settings semantics', () => {
 
   test('Drop & Hook explicit settings are preserved without inventing unrelated finance or account settings', () => {
     const output = generate('Build Drop & Hook Assistant for one driver. Settings: Home Base and Truck Profiles. Save trailer suggestions. No accounts, payroll, or fleet management.', { buildType: 'app-web-app', creationFormat: 'android-app', visualStyle: 'premium-modern' });
-    const settings = section(output, 'Settings', 'Completion Standard').toLowerCase();
+    const settings = section(output, 'Settings', 'Visual Direction').toLowerCase();
     expect(settings).toContain('home base');
     expect(settings).toContain('truck profiles');
     expect(settings).not.toContain('payment');
