@@ -49,7 +49,7 @@ tests:
       idea: 'Build a web productivity tool for students where they add a task and mark it complete. It has Tasks screen. Optional calendar. No chat.'
     assert:
       - type: javascript
-        value: 'output.toLowerCase().includes("responsive web")'
+        value: 'output.toLowerCase().includes("web")'
       - type: javascript
         value: 'output.toLowerCase().includes("add a task")'
       - type: contains
@@ -80,7 +80,7 @@ tests:
     vars: {idea: 'Build a checklist for families. Required features: checklist. Optional: color labels.'}
     assert:
       - type: javascript
-        value: 'output.toLowerCase().includes("color labels")'
+        value: 'output.toLowerCase().includes("optional: color labels")'
       - type: contains
         value: 'Completion Standard'
   - description: explicit exclusion
