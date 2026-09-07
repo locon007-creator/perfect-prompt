@@ -109,9 +109,16 @@ const extractPersistentState = (text: string) => unique(
     .map(value => `Maintain ${value}`)
 );
 
+const extractConditionalStates = (text: string) => unique(sentenceUnits(text)
+  .filter(unit => /^(?:when\b|whenever\b|if\b|once\b|on\b|(?:\w+\s+){0,3}(?:days?|weeks?|months?)\s+(?:before|after)\b)/i.test(unit))
+  .filter(unit => /\b(?:show|ask|prompt|notify|surface|open|update|save|confirm|require|allow|calculate|record|mark)\b/i.test(unit))
+  .map(stripInlineNegative)
+  .filter(Boolean));
+
 const extractExtraStates = (text: string) => unique([
   ...sentenceUnits(text).filter(unit => /^(?:navigation\b.*\bopen externally|navigation can open externally)$/i.test(unit)).map(clean),
   ...extractPersistentState(text),
+  ...extractConditionalStates(text),
 ]);
 
 const extractMobileConstraints = (text: string) => {
