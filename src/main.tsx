@@ -93,3 +93,5 @@ function App(){
 }
 
 createRoot(document.getElementById('root')!).render(<App/>);
+
+// refresh Vercel preview for the corrected visual branch
