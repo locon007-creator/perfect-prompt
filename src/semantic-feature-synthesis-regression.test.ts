@@ -36,21 +36,24 @@ describe('semantic feature synthesis', () => {
   test('core features are concise semantic requirements without source-fragment contamination', () => {
     const output = generate(raw, { buildType: 'app-web-app', creationFormat: 'ios-app', visualStyle: 'figma-product' });
     const core = output.split('Core Features')[1]?.split('Interaction & State Rules')[0] || '';
+    const states = output.split('Interaction & State Rules')[1]?.split('Visual Direction')[0] || '';
 
     expect(core).toContain('Punch in to start a work shift.');
     expect(core).toContain('Punch out to end the active shift.');
-    expect(core).toContain('Show a live elapsed shift timer.');
+    expect(core).toContain('Show a live elapsed shift timer that remains accurate if the app is closed and reopened.');
     expect(core).toContain('Calculate and save total daily worked hours.');
     expect(core).toContain('Show a Sunday–Friday Weekly view with daily hours and the weekly total.');
-    expect(core).toContain('Provide History for reviewing and editing saved workdays.');
+    expect(core).toContain('Provide History for reviewing and editing previous workdays.');
     expect(core).toContain('Allow the user to choose their preferred time format.');
-    expect(core).toContain('Persist all timesheet data locally across app restarts.');
+    expect(states).toContain('Save all timesheet data locally so entries survive app restarts');
 
     expect(core).not.toContain('Make it fast.');
     expect(core).not.toContain('One main job:');
     expect(core).not.toContain('Record Home should');
     expect(core).not.toContain('Calculate and display Include');
     expect(core).not.toContain('Record Allow the user');
+    expect(core).not.toContain('Persist all timesheet data');
+    expect(core).not.toContain('Keep it strictly personal.');
   });
 
   test('semantic synthesis does not mutate the Idea Lock', () => {
