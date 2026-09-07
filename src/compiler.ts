@@ -234,7 +234,7 @@ const compactQuality = (output: string) => {
   const lines = unique(sectionBody(output, 'Build Quality & Brand Experience', 'Constraints').split(/\r?\n/).map(line => line.trim()).filter(Boolean));
   if (lines.length <= 4) return lines.join('\n');
   const guard = lines.find(line => /generic template|placeholder styling|stock component/i.test(line));
-  return unique([...lines.slice(0, 3), ...(guard ? [guard] : [lines[3])]]).slice(0, 4).join('\n');
+  return unique([...lines.slice(0, 3), ...(guard ? [guard] : [lines[3]])]).slice(0, 4).join('\n');
 };
 const completionFor = (prompt: Prompt) => {
   if (prompt.buildType !== 'app-web-app') return prompt.completion;
