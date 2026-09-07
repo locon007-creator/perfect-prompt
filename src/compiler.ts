@@ -143,8 +143,8 @@ const conciseRole = (role: string, buildType?: BuildType) => {
   return design ? `${first} ${design}` : first;
 };
 const appBuildConstraints = (buildType?: BuildType) => buildType === 'app-web-app' ? [
-  'Build the first version as one complete self-contained index.html with inline CSS and JavaScript; represent required screens as fully functional app views with the needed navigation, interaction, state, persistence, forms, sheets, dialogs, and timers unless another stack is explicitly locked.',
-  'Keep it directly runnable and previewable without a build step, with logic organized so it can be split into multiple files later if the product grows.',
+  'Build the first version as one complete single self-contained index.html with inline CSS and JavaScript unless the locked idea explicitly requests another stack; Multiple screens must behave as fully functional app views with the navigation, interaction, state, persistence, forms, sheets, dialogs, and timers the locked requirements need.',
+  'Keep the first version directly runnable and previewable without a build step, with logic organized so it can be split into multiple files later if the product grows.',
 ] : [];
 const missionFor = (base: Prompt, lock: IdeaLock, buildType?: BuildType) => {
   if (buildType === 'app-web-app') return `Build ${lock.appName} for ${lock.targetUser}. Primary job: ${compactPrimaryJob(lock.primaryJob, lock.appName)}.`;
@@ -230,10 +230,18 @@ const compactLock = (prompt: Prompt) => [
   `Target user: ${prompt.lock.targetUser}`,
   `Platform / medium: ${prompt.platform}`,
 ].join('\n');
-const compactQuality = (output: string) => unique(sectionBody(output, 'Build Quality & Brand Experience', 'Constraints').split(/\r?\n/).map(line => line.trim()).filter(Boolean)).slice(0, 4).join('\n');
-const completionFor = (prompt: Prompt) => prompt.lock.workflow
-  ? 'Implement every locked requirement, preserve the explicitly provided workflow, and add no unrequested screens or features.'
-  : 'Implement every locked requirement exactly and add no unrequested screens, features, integrations, roles, or workflows.';
+const compactQuality = (output: string) => {
+  const lines = unique(sectionBody(output, 'Build Quality & Brand Experience', 'Constraints').split(/\r?\n/).map(line => line.trim()).filter(Boolean));
+  if (lines.length <= 4) return lines.join('\n');
+  const guard = lines.find(line => /generic template|placeholder styling|stock component/i.test(line));
+  return unique([...lines.slice(0, 3), ...(guard ? [guard] : [lines[3])]]).slice(0, 4).join('\n');
+};
+const completionFor = (prompt: Prompt) => {
+  if (prompt.buildType !== 'app-web-app') return prompt.completion;
+  return prompt.lock.workflow
+    ? 'Implement every locked requirement, preserve the explicitly provided workflow, and add no unrequested screens or features.'
+    : 'Implement every locked requirement exactly and add no unrequested screens, features, integrations, roles, or workflows.';
+};
 
 export function assemble(prompt: Prompt) {
   let output = legacy.assemble(prompt);
