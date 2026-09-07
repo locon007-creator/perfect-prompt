@@ -23,7 +23,7 @@ const section=(text:string, labels:string[])=>{const r=new RegExp(`(?:${labels.j
 const purposeLead=/^(?:recording|tracking|managing|organizing|saving|calculating|logging|planning|monitoring|keeping|creating|entering|reviewing|showing|handling|using)\b/i;
 const unique=(items:string[])=>items.filter((item,index)=>items.findIndex(other=>other.toLowerCase()===item.toLowerCase())===index);
 const negativeLead=/^(?:do not|don't|without|no)\b/i;
-const stripInlineNegative=(item:string)=>clean(item.replace(/\s+(?:(?:but\s+)?without|with\s+no|but\s+no)\s+.+$/i,''));
+const stripInlineNegative=(item:string)=>clean(item.replace(/\s*(?:[.;]\s*)?(?:(?:but\s+)?without|with\s+no|but\s+no|do not|don't)\s+.+$/i,''));
 const positiveList=(value:string|undefined)=>unique(list(value).filter(item=>!negativeLead.test(item)).map(stripInlineNegative).filter(Boolean));
 const positiveText=(value:string)=>stripInlineNegative(clean(value));
 const sentenceUnits=(text:string)=>unique([
@@ -47,11 +47,16 @@ const extractStructures=(text:string,workflow:string)=>{
  const explicitSection=section(text,['screens','pages','views']);
  if(explicitSection)return positiveList(explicitSection);
  const found:string[]=[];
+ const explicitMentions:string[]=[];
  for(const match of text.matchAll(/\b([a-z][\w ]*?)\s+(?:screen|page|view)\b/gi)){
-  const value=match[1].replace(/^(?:It should have|it has|include|also include)\s+(?:a|an|the)\s+/i,'').trim();
-  if(value)found.push(value);
+  const value=match[1]
+   .replace(/^(?:and\s+)?/i,'')
+   .replace(/^(?:It should have|it has|include|also include)\s+(?:a|an|the)\s+/i,'')
+   .replace(/^(?:a|an|the)\s+/i,'')
+   .trim();
+  if(value){explicitMentions.push(value);found.push(value);}
  }
- for(const stage of workflow.split(/→|->|,|;|\bthen\b/gi).map(clean).filter(Boolean))found.push(stage);
+ if(explicitMentions.length<2)for(const stage of workflow.split(/→|->|,|;|\bthen\b/gi).map(clean).filter(Boolean))found.push(stage);
  for(const unit of sentenceUnits(text)){
   const subject=/^([A-Z][A-Za-z0-9 &/+-]{0,48}?)\s+should\b/.exec(unit)?.[1]?.trim();
   if(subject && !/^(?:the app|the site|the game|the product|it)$/i.test(subject))found.push(subject);
