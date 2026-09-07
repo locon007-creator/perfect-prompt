@@ -128,6 +128,18 @@ const titleFromFirstLine = (text: string, fallback: string) => {
 };
 
 const sanitizeRole = (role: string) => role.replace(/([.!?]\s+)You are\s+/g, '$1Also act as ');
+const conciseRole = (role: string, buildType?: BuildType) => {
+  const sanitized = sanitizeRole(role);
+  if (buildType !== 'app-web-app') return sanitized;
+  const first = sanitized.match(/^.*?[.!?](?:\s|$)/)?.[0]?.trim() || 'You are a senior product designer and Full-Stack Application Engineer.';
+  const design = sanitized.match(/Also act as .+$/)?.[0];
+  return design ? `${first} ${design}` : first;
+};
+const appBuildConstraints = (buildType?: BuildType) => buildType === 'app-web-app' ? [
+  'Build the first version as one complete single self-contained index.html with inline CSS and JavaScript unless the locked idea explicitly requests another stack.',
+  'Multiple screens must behave as app views inside the same file with the navigation, interaction, state, persistence, sheets, dialogs, timers, forms, and workflow behavior the locked requirements need.',
+  'Keep the first version directly runnable and previewable without a build step, while preserving a structure that can be split into multiple files later if the product grows.',
+] : [];
 const missionFor = (base: Prompt, lock: IdeaLock, buildType?: BuildType) => {
   if (buildType === 'app-web-app') return `Build ${lock.appName} for ${lock.targetUser}. Primary job: ${clean(lock.primaryJob)}.`;
   return base.mission;
@@ -176,7 +188,7 @@ export function compile(raw: string, options: GenerateOptions = {}): Prompt {
   const lock = parseIdea(raw);
   return {
     ...base,
-    role: sanitizeRole(base.role),
+    role: conciseRole(base.role, options.buildType),
     mission: missionFor(base, lock, options.buildType),
     lock,
     targetUser: lock.targetUser,
@@ -184,36 +196,50 @@ export function compile(raw: string, options: GenerateOptions = {}): Prompt {
     screens: [...lock.screens],
     features: [...lock.requiredFeatures],
     states: [...lock.stateRules, ...lock.persistenceRules],
-    constraints: [...lock.constraints],
+    constraints: unique([...lock.constraints, ...appBuildConstraints(options.buildType)]),
     doNotAdd: [...lock.explicitExclusions],
   };
 }
 
 const replaceSection = (output: string, name: string, next: string, body: string) => {
-  const start = `\n\n${name}\n\n`;
+  const start = `${name}\n\n`;
   const end = `\n\n${next}\n\n`;
-  const before = output.split(start)[0];
-  const rest = output.split(start)[1];
-  if (rest === undefined) return output;
-  const after = rest.split(end)[1];
-  if (after === undefined) return output;
-  return `${before}${start}${body}${end}${after}`;
+  const startAt = output.indexOf(start);
+  if (startAt < 0) return output;
+  const bodyAt = startAt + start.length;
+  const endAt = output.indexOf(end, bodyAt);
+  if (endAt < 0) return output;
+  return `${output.slice(0, bodyAt)}${body}${output.slice(endAt)}`;
 };
+const compactLock = (prompt: Prompt) => [
+  `Project type: ${prompt.buildType === 'app-web-app' ? 'App / Web App' : prompt.buildType || 'Unspecified'}`,
+  `Creation format: ${prompt.formatLabel}`,
+  `Project name: ${prompt.lock.appName}`,
+  `Primary job: ${prompt.lock.primaryJob}`,
+  `Target user: ${prompt.lock.targetUser}`,
+  `Platform / medium: ${prompt.platform}`,
+].join('\n');
 
 export function assemble(prompt: Prompt) {
   let output = legacy.assemble(prompt);
+  output = replaceSection(output, 'Idea Lock', 'Target User', compactLock(prompt));
   if (prompt.states.length) {
     output = replaceSection(output, 'Interaction & State Rules', 'Visual Direction', unique(prompt.states.map(sentenceLine).filter(Boolean)).join('\n'));
   }
   return output;
 }
 
+const validationPrompt = (prompt: Prompt): Prompt => ({
+  ...prompt,
+  lock: { ...prompt.lock, lockedInstructions: [] },
+});
+
 export function validateContradictions(prompt: Prompt, output: string) {
-  return legacy.validateContradictions(prompt, output);
+  return legacy.validateContradictions(validationPrompt(prompt), output);
 }
 
 export function validate(prompt: Prompt, output: string) {
-  return legacy.validate(prompt, output);
+  return legacy.validate(validationPrompt(prompt), output);
 }
 
 export const generate = (raw: string, options: GenerateOptions = {}) => {
