@@ -23,7 +23,7 @@ const section=(text:string, labels:string[])=>{const r=new RegExp(`(?:${labels.j
 const purposeLead=/^(?:recording|tracking|managing|organizing|saving|calculating|logging|planning|monitoring|keeping|creating|entering|reviewing|showing|handling|using)\b/i;
 const unique=(items:string[])=>items.filter((item,index)=>items.findIndex(other=>other.toLowerCase()===item.toLowerCase())===index);
 const negativeLead=/^(?:do not|don't|without|no)\b/i;
-const stripInlineNegative=(item:string)=>clean(item.replace(/\s*(?:[.;]\s*)?(?:(?:but\s+)?without|with\s+no|but\s+no|do not|don't)\s+.+$/i,''));
+const stripInlineNegative=(item:string)=>clean(item.replace(/\s*(?:[.;]\s*)?(?:(?:but\s+)?without|with\s+no|but\s+no|do not|don't|no)\s+.+$/i,''));
 const positiveList=(value:string|undefined)=>{if(!value)return[];const positiveOnly=stripInlineNegative(value);return unique(list(positiveOnly).filter(item=>!negativeLead.test(item)).map(clean).filter(Boolean));};
 const positiveText=(value:string)=>stripInlineNegative(clean(value));
 const sentenceUnits=(text:string)=>unique([
