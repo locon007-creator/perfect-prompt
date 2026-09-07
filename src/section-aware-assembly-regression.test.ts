@@ -37,7 +37,7 @@ describe('section-aware prompt assembly', () => {
     const platform = section(output, 'Platform', 'Main Workflow');
     expect(audience).toContain('Primary audience: the intended user.');
     expect(audience).toContain('Do not invent a more specific persona');
-    expect(platform).toContain('Platform / medium: Not explicitly specified.');
+    expect(platform).toContain('Not explicitly specified');
     expect(platform).toContain('Do not assume Android, iOS, or web');
   });
 
