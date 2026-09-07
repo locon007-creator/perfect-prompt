@@ -214,7 +214,7 @@ const missionFor = (base: Prompt, lock: IdeaLock, buildType?: BuildType) => {
 export function parseIdea(raw: string): IdeaLock {
   const text = InputSchema.parse({ idea: raw }).idea;
   const base = legacy.parseIdea(text);
-  const screens = cleanStructures(text, unique([...base.screens, ...workflowViews(base.workflow)]));
+  const screens = cleanStructures(text, base.screens);
   const continuity = extractContinuityRules(text);
   let baseRequired = [...base.requiredFeatures];
   if (continuity.length) baseRequired = baseRequired.filter(item => !/pickup trailer|drop trailer|continues through the route/i.test(item));
@@ -253,9 +253,14 @@ export function compile(raw: string, options: GenerateOptions = {}): PromptWithS
   const inferred = options.buildType === 'app-web-app'
     ? inferMinimumViableProduct(raw, lock, options.creationFormat || 'idea-decides')
     : { features: [], screens: [], states: [] };
-  const features = unique([...removeProductEcho(lock.requiredFeatures, lock), ...inferred.features]);
+  const features = options.buildType === 'app-web-app'
+    ? unique([...removeProductEcho(lock.requiredFeatures, lock), ...inferred.features])
+    : inferred.features.length
+      ? unique([...removeProductEcho(lock.requiredFeatures, lock), ...inferred.features])
+      : [...lock.requiredFeatures];
   const explicitSettings = extractExplicitSettings(raw);
   const settings = explicitSettings.length ? explicitSettings : options.buildType === 'app-web-app' ? inferSettings(raw, options.creationFormat) : [];
+  const blueprintScreens = options.buildType === 'app-web-app' ? workflowViews(lock.workflow) : [];
   return {
     ...base,
     role: conciseRole(base.role, options.buildType),
@@ -263,7 +268,7 @@ export function compile(raw: string, options: GenerateOptions = {}): PromptWithS
     lock,
     targetUser: lock.targetUser,
     workflow: lock.workflow,
-    screens: unique([...lock.screens, ...inferred.screens]).filter(screen => !settingsOptionStructure.test(clean(screen))),
+    screens: unique([...lock.screens, ...blueprintScreens, ...inferred.screens]).filter(screen => !settingsOptionStructure.test(clean(screen))),
     features,
     states: unique([...lock.stateRules, ...lock.persistenceRules, ...inferred.states]),
     constraints: unique([...lock.constraints, ...appBuildConstraints(options.buildType)]),
