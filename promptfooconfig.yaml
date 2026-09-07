@@ -1,0 +1,3 @@
+description: Perfect Prompt compiler regression evaluation
+providers: [{id: 'file://src/eval-provider.ts'}]
+tests: [{description: 'structured output', vars: {idea: 'Build a grocery list for busy parents'}, assert: [{type: contains, value: 'Completion Standard'}]}]
