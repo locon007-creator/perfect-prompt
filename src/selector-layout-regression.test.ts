@@ -1,7 +1,6 @@
-import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
+import css from './selector-layout.css?raw';
 
-const css = readFileSync(new URL('./selector-layout.css', import.meta.url), 'utf8');
 const dropdownRule = css.match(/\.selector-stack-item \.build-options\{([^}]*)\}/)?.[1] ?? '';
 
 describe('selector dropdown mobile layout', () => {
