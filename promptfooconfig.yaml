@@ -60,3 +60,33 @@ tests:
         value: 'chat'
       - type: javascript
         value: 'output.includes("Product Mission") && output.includes("Do Not Add")'
+  - description: mobile notes utility
+    vars: {idea: 'Build a notes utility for writers on mobile. Workflow: create note, edit note. Screens: Notes, Editor. Required features: note editing. No sharing.'}
+    assert:
+      - type: contains
+        value: 'note editing'
+      - type: contains
+        value: 'Notes'
+      - type: contains
+        value: 'mobile'
+  - description: persistence requirement
+    vars: {idea: 'Build a work log for teams. Workflow: add entry, review log. Save entries permanently.'}
+    assert:
+      - type: contains
+        value: 'Save entries permanently'
+      - type: contains
+        value: 'add entry'
+  - description: optional feature
+    vars: {idea: 'Build a checklist for families. Required features: checklist. Optional: color labels.'}
+    assert:
+      - type: contains
+        value: 'color labels'
+      - type: contains
+        value: 'Completion Standard'
+  - description: explicit exclusion
+    vars: {idea: 'Build a shopping list for households. Required features: item entry. No payments.'}
+    assert:
+      - type: contains
+        value: 'payments'
+      - type: javascript
+        value: '!output.match(/Core Features[\\s\\S]*payments/i)'
