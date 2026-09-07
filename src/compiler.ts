@@ -60,10 +60,12 @@ const cleanStructures = (text: string, screens: readonly string[]) => {
   return unique([...screens].filter(screen => !workflowAction.test(clean(screen)) && !behaviorLikeStructure.test(screen)));
 };
 
-const requirementLead = /^(?:(?:only\s+)?(?:when\b|during\b|pressing\b|show\b|allow\b|use\b|provide\b|include\b|record\b|save\b|add\b|create\b|mark\b|edit\b|delete\b|remove\b|calculate\b|track\b|set\b|update\b)|(?:also\s+)?include\b|[A-Z][A-Za-z0-9 &/+-]{0,48}\s+should\b)/i;
-const extractNaturalRequirements = (text: string) => sentenceUnits(text)
+const requirementLead = /^(?:(?:only\s+)?(?:when\b|during\b|pressing\b|show\b|allow\b|use\b|provide\b|include\b|record\b|add\b|mark\b|edit\b|delete\b|remove\b|calculate\b|track\b|set\b|update\b)|(?:also\s+)?include\b|[A-Z][A-Za-z0-9 &/+-]{0,48}\s+should\b)/i;
+const extractNaturalRequirements = (text: string) => unique(sentenceUnits(text)
   .filter(unit => requirementLead.test(unit))
-  .filter(unit => !/^(?:no\b|do not\b|don't\b|without\b)/i.test(unit));
+  .filter(unit => !/^(?:no\b|do not\b|don't\b|without\b)/i.test(unit))
+  .map(stripInlineNegative)
+  .filter(Boolean));
 
 const extractDeclaredFields = (text: string, kind: 'required' | 'optional') => {
   const fields: string[] = [];
@@ -95,7 +97,8 @@ const extractContinuityRules = (text: string) => {
 
 const extractPersistence = (text: string) => unique(sentenceUnits(text)
   .filter(unit => /^(?:save|store|persist)\b/i.test(unit) || /^use\b.*\bstorage\b/i.test(unit))
-  .map(clean));
+  .map(stripInlineNegative)
+  .filter(Boolean));
 
 const extractPersistentState = (text: string) => unique(
   [...text.matchAll(/\bpersistent\s+[^,.;]*?\bstate\b/gi)]
@@ -296,7 +299,14 @@ const validationPrompt = (prompt: Prompt): Prompt => ({
   ...prompt,
   workflow: '',
   features: [],
-  lock: { ...prompt.lock, workflow: '', lockedInstructions: [], optionalFeatures: [] },
+  lock: {
+    ...prompt.lock,
+    workflow: '',
+    lockedInstructions: [],
+    optionalFeatures: [],
+    requiredFeatures: [...prompt.features],
+    screens: [...prompt.screens],
+  },
 });
 
 export function validateContradictions(prompt: Prompt, output: string) {
