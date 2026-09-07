@@ -1,0 +1,92 @@
+description: Perfect Prompt compiler regression evaluation
+prompts:
+  - '{{idea}}'
+providers:
+  - id: 'file://src/eval-provider.ts'
+tests:
+  - description: structured output and fidelity
+    vars:
+      idea: 'Build a Generic Task Manager for busy people on Android. Workflow: add task, complete task, review list. Screens: Tasks, Review. Required features: task entry. No reminders.'
+    assert:
+      - type: contains
+        value: 'Primary job'
+      - type: contains
+        value: 'Main Workflow'
+      - type: contains
+        value: 'add task'
+      - type: contains
+        value: 'Android'
+      - type: contains
+        value: 'Do Not Add'
+      - type: contains
+        value: 'task entry'
+      - type: contains
+        value: 'reminders'
+      - type: contains
+        value: 'Screen Requirements'
+      - type: contains
+        value: 'Completion Standard'
+      - type: javascript
+        value: '!output.match(/Home \/ primary|Success \/ confirmation|Details or editor/i)'
+  - description: iOS personal tracker
+    vars:
+      idea: 'Create a personal tracker for runners on iOS where they log a run and review progress. It should have Log and Progress screens. Save run history. No social feed.'
+    assert:
+      - type: contains
+        value: 'iOS'
+      - type: contains
+        value: 'log a run'
+      - type: contains
+        value: 'Progress'
+      - type: contains
+        value: 'Save run history'
+      - type: contains
+        value: 'social feed'
+      - type: javascript
+        value: 'output.includes("Role") && output.includes("Completion Standard") && !output.match(/Home \/ primary|Success \/ confirmation|Details or editor/i)'
+  - description: web productivity tool
+    vars:
+      idea: 'Build a web productivity tool for students where they add a task and mark it complete. It has Tasks screen. Optional calendar. No chat.'
+    assert:
+      - type: contains
+        value: 'responsive web'
+      - type: contains
+        value: 'add a task'
+      - type: contains
+        value: 'Tasks'
+      - type: contains
+        value: 'calendar'
+      - type: contains
+        value: 'chat'
+      - type: javascript
+        value: 'output.includes("Product Mission") && output.includes("Do Not Add")'
+  - description: mobile notes utility
+    vars: {idea: 'Build a notes utility for writers on mobile. Workflow: create note, edit note. Screens: Notes, Editor. Required features: note editing. No sharing.'}
+    assert:
+      - type: contains
+        value: 'note editing'
+      - type: contains
+        value: 'Notes'
+      - type: contains
+        value: 'mobile'
+  - description: persistence requirement
+    vars: {idea: 'Build a work log for teams. Workflow: add entry, review log. Save entries permanently.'}
+    assert:
+      - type: contains
+        value: 'Save entries permanently'
+      - type: contains
+        value: 'add entry'
+  - description: optional feature
+    vars: {idea: 'Build a checklist for families. Required features: checklist. Optional: color labels.'}
+    assert:
+      - type: contains
+        value: 'color labels'
+      - type: contains
+        value: 'Completion Standard'
+  - description: explicit exclusion
+    vars: {idea: 'Build a shopping list for households. Required features: item entry. No payments.'}
+    assert:
+      - type: contains
+        value: 'payments'
+      - type: javascript
+        value: '!output.match(/Core Features[\\s\\S]*payments/i)'
