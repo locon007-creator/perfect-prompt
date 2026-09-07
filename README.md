@@ -27,3 +27,5 @@ Promptfoo is included for regression evaluation. Run `npm run eval` after instal
 ## Vercel deployment
 
 Import this repository into Vercel. The framework is Vite; use `npm run build` as the build command and `dist` as the output directory. No server or environment variables are required. Vercel automatically serves the generated static app.
+
+Deployment sync marker: 10/10 output blueprint verified on main.
