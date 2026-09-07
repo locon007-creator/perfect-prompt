@@ -1,8 +1,11 @@
 import { describe, expect, test } from 'vitest';
 import { generate } from './compiler';
 
-const section = (output: string, name: string, next: string) =>
-  (output.split(`\n\n${name}\n\n`)[1]?.split(`\n\n${next}\n\n`)[0] || '').trim();
+const section = (output: string, name: string, next: string) => {
+  const start = `${name}\n`;
+  const body = output.startsWith(start) ? output.slice(start.length) : output.split(`\n\n${name}\n\n`)[1] || '';
+  return (body.split(`\n\n${next}\n\n`)[0] || '').trim();
+};
 
 const dropHook = `Drop & Hook Assistant
 
