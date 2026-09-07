@@ -1,5 +1,5 @@
 import * as legacy from './compiler-legacy';
-import type { BuildType } from './intent';
+import { getSpecialistProfile, type BuildType } from './intent';
 import type { CreationFormat } from './creation-format';
 import type { VisualStyle } from './visual-style';
 
@@ -126,6 +126,13 @@ const titleFromFirstLine = (text: string, fallback: string) => {
   if (!first || first.length > 64 || /^(?:build|create|make|design|role|product|primary|main)\b/i.test(first)) return fallback;
   return first;
 };
+const compactPrimaryJob = (value: string, appName: string) => {
+  let job = clean(value.split(/\b(?:Workflow|Screens?|Pages?|Views?|Required features?|Optional features?|Rules?)\s*:/i)[0] || value);
+  job = job.replace(/^(?:build|create|make|design)\s+/i, '').trim();
+  const escaped = appName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  job = job.replace(new RegExp(`^${escaped}\\s+(?:for|to)\\s+`, 'i'), '').trim();
+  return job || clean(value);
+};
 
 const sanitizeRole = (role: string) => role.replace(/([.!?]\s+)You are\s+/g, '$1Also act as ');
 const conciseRole = (role: string, buildType?: BuildType) => {
@@ -141,7 +148,7 @@ const appBuildConstraints = (buildType?: BuildType) => buildType === 'app-web-ap
   'Keep the first version directly runnable and previewable without a build step, while preserving a structure that can be split into multiple files later if the product grows.',
 ] : [];
 const missionFor = (base: Prompt, lock: IdeaLock, buildType?: BuildType) => {
-  if (buildType === 'app-web-app') return `Build ${lock.appName} for ${lock.targetUser}. Primary job: ${clean(lock.primaryJob)}.`;
+  if (buildType === 'app-web-app') return `Build ${lock.appName} for ${lock.targetUser}. Primary job: ${compactPrimaryJob(lock.primaryJob, lock.appName)}.`;
   return base.mission;
 };
 
@@ -151,9 +158,7 @@ export function parseIdea(raw: string): IdeaLock {
   const screens = cleanStructures(text, base.screens);
   const continuity = extractContinuityRules(text);
   let baseRequired = [...base.requiredFeatures];
-  if (continuity.length) {
-    baseRequired = baseRequired.filter(item => !/pickup trailer|drop trailer|continues through the route/i.test(item));
-  }
+  if (continuity.length) baseRequired = baseRequired.filter(item => !/pickup trailer|drop trailer|continues through the route/i.test(item));
   const declaredRequired = extractDeclaredFields(text, 'required');
   const declaredOptional = extractDeclaredFields(text, 'optional');
   const requiredDeclaration = declaredRequired.length ? [`Require ${declaredRequired.join(' and ')}`] : [];
@@ -212,10 +217,10 @@ const replaceSection = (output: string, name: string, next: string, body: string
   return `${output.slice(0, bodyAt)}${body}${output.slice(endAt)}`;
 };
 const compactLock = (prompt: Prompt) => [
-  `Project type: ${prompt.buildType === 'app-web-app' ? 'App / Web App' : prompt.buildType || 'Unspecified'}`,
+  `Project type: ${getSpecialistProfile(prompt.buildType || 'general').label}`,
   `Creation format: ${prompt.formatLabel}`,
   `Project name: ${prompt.lock.appName}`,
-  `Primary job: ${prompt.lock.primaryJob}`,
+  `Primary job: ${compactPrimaryJob(prompt.lock.primaryJob, prompt.lock.appName)}`,
   `Target user: ${prompt.lock.targetUser}`,
   `Platform / medium: ${prompt.platform}`,
 ].join('\n');
@@ -223,22 +228,41 @@ const compactLock = (prompt: Prompt) => [
 export function assemble(prompt: Prompt) {
   let output = legacy.assemble(prompt);
   output = replaceSection(output, 'Idea Lock', 'Target User', compactLock(prompt));
-  if (prompt.states.length) {
-    output = replaceSection(output, 'Interaction & State Rules', 'Visual Direction', unique(prompt.states.map(sentenceLine).filter(Boolean)).join('\n'));
-  }
+  if (prompt.states.length) output = replaceSection(output, 'Interaction & State Rules', 'Visual Direction', unique(prompt.states.map(sentenceLine).filter(Boolean)).join('\n'));
   return output;
 }
 
+const sectionBody = (output: string, name: string, next: string) => output.split(`${name}\n\n`)[1]?.split(`\n\n${next}\n\n`)[0] || '';
+const validateCompactLock = (prompt: Prompt, output: string) => {
+  for (const fact of compactLock(prompt).split('\n')) if (!output.toLowerCase().includes(fact.toLowerCase())) throw Error(`Locked fact missing: ${fact.split(':')[0]}`);
+};
+const validateWorkflow = (prompt: Prompt, output: string) => {
+  if (!prompt.lock.workflow) return;
+  const lower = sectionBody(output, 'Main Workflow', 'Structure Requirements').toLowerCase();
+  if (!lower.includes(prompt.lock.workflow.toLowerCase())) throw Error('Workflow altered or missing');
+  let from = 0;
+  for (const step of prompt.lock.workflow.split(/→|->|,|;|\band\b|\bthen\b/gi).map(clean).filter(Boolean)) {
+    const at = lower.indexOf(step.toLowerCase(), from);
+    if (at < 0) throw Error(`Workflow step missing or reordered: ${step}`);
+    from = at + step.length;
+  }
+};
 const validationPrompt = (prompt: Prompt): Prompt => ({
   ...prompt,
-  lock: { ...prompt.lock, lockedInstructions: [] },
+  workflow: '',
+  features: [],
+  lock: { ...prompt.lock, workflow: '', lockedInstructions: [] },
 });
 
 export function validateContradictions(prompt: Prompt, output: string) {
+  validateCompactLock(prompt, output);
+  validateWorkflow(prompt, output);
   return legacy.validateContradictions(validationPrompt(prompt), output);
 }
 
 export function validate(prompt: Prompt, output: string) {
+  validateCompactLock(prompt, output);
+  validateWorkflow(prompt, output);
   return legacy.validate(validationPrompt(prompt), output);
 }
 
