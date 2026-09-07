@@ -34,8 +34,9 @@ export function parseIdea(raw:string):IdeaLock {
  const naturalFeatures=(/\bwhere\s+(?:they|users?|people)\s+(.+?)(?=\.|\s+It should|\s+No\b|$)/i.exec(text)?.[1]||'').replace(/\b(and|then)\b/gi,',');
  const includeFeatures=(/\b(?:also\s+)?include(?:s|d)?\s+(.+?)(?=\.|$)/i.exec(text)?.[1]||'');
  const hasFeatures=(/\b(?:also\s+)?(?:should\s+have|has)\s+(.+?)(?=\.|$)/i.exec(text)?.[1]||'');
+ const alsoFeatures=(/(?:^|[.!?]\s*)(?:and\s+)?also\s+(?!include\b)(.+?)(?=\.|$)/i.exec(text)?.[1]||'');
  const explicitRequired=section(text,['required features','must have','required','features','include']);
- const requiredParts=explicitRequired?[explicitRequired]:[naturalFeatures,purposeClause,includeFeatures,hasFeatures].filter(Boolean);
+ const requiredParts=explicitRequired?[explicitRequired]:[naturalFeatures,purposeClause,includeFeatures,hasFeatures,alsoFeatures].filter(Boolean);
  const requiredText=requiredParts.join(', ');
  const optionalText=section(text,['optional features','optional'])||((/\boptional(?:ly)?\s+(.+?)(?=\.|$)/i.exec(text)?.[1])||'');
  const exclusionMatches=[...text.matchAll(/(?:do not|don't|without|no)\s+([^.;,]+)/gi)].map(m=>clean(m[1]));
