@@ -3,7 +3,7 @@ import { generate, parseIdea } from './compiler';
 import type { BuildType } from './intent';
 
 const cases: Array<{ type: BuildType; label: string; idea: string; medium: string; structure: string; completion: string }> = [
-  { type: 'app-web-app', label: 'App / Web App', idea: 'Build a checklist app for one person. Required features: checklist.', medium: 'responsive web', structure: 'Only screens explicitly required by the idea.', completion: 'locked requirement' },
+  { type: 'app-web-app', label: 'App / Web App', idea: 'Build a checklist app for one person. Required features: checklist.', medium: 'Not explicitly specified', structure: 'Only screens explicitly required by the idea.', completion: 'locked requirement' },
   { type: 'website', label: 'Website', idea: 'Build a website called Northstar for homeowners. Required features: contact form.', medium: 'Web', structure: 'Only pages explicitly required by the idea.', completion: 'page' },
   { type: 'game', label: 'Game', idea: 'Build a puzzle game for casual players. Required features: score tracking.', medium: 'Game platform not specified', structure: 'Only gameplay screens or views explicitly required by the idea.', completion: 'gameplay' },
   { type: 'video', label: 'Video', idea: 'Create a short launch video for small businesses. Required features: voiceover.', medium: 'Video production', structure: 'Only scenes, shots, or sequence requirements explicitly required by the idea.', completion: 'sequence' },
