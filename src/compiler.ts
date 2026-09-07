@@ -17,7 +17,8 @@ export type Prompt = { role:string; mission:string; lock:IdeaLock; targetUser:st
 const freeze = <T>(value:T):Readonly<T> => { if(value && typeof value==='object' && !Object.isFrozen(value)){Object.freeze(value); for(const v of Object.values(value as object)) freeze(v);} return value as Readonly<T>; };
 const clean=(s:string)=>s.replace(/[.!?]+$/,'').trim();
 const list=(s:string|undefined)=>s? s.split(/,|;|\n|\band\b/gi).map(clean).filter(Boolean):[];
-const section=(text:string, labels:string[])=>{const r=new RegExp(`(?:${labels.join('|')})\\s*[:\\-]\\s*([^.!?]+)`,'i');return r.exec(text)?.[1]?.trim()};
+const sentenceBody='((?:[^.!?]|\\.(?=\\d))+)' ;
+const section=(text:string, labels:string[])=>{const r=new RegExp(`(?:${labels.join('|')})\\s*[:\\-]\\s*${sentenceBody}`,'i');return r.exec(text)?.[1]?.trim()};
 const purposeLead=/^(?:recording|tracking|managing|organizing|saving|calculating|logging|planning|monitoring|keeping|creating|entering|reviewing|showing|handling|using)\b/i;
 const unique=(items:string[])=>items.filter((item,index)=>items.findIndex(other=>other.toLowerCase()===item.toLowerCase())===index);
 export function parseIdea(raw:string):IdeaLock {
@@ -29,21 +30,21 @@ export function parseIdea(raw:string):IdeaLock {
  const forClause=(/\bfor\s+([^.;]+?)(?=\s+(?:where|that|on|with|which)\b|[.!?]|$)/i.exec(text)?.[1]||'').trim();
  const purposeClause=purposeLead.test(forClause)?forClause:'';
  const target=clean(targeted||(!purposeClause&&forClause?forClause:'the intended user'));
- const workflow=clean(section(text,['workflow','flow','steps','process'])||(/\bwhere\s+(?:they|users?|people)\s+(.+?)(?=\.|\s+It should|\s+No\b|$)/i.exec(text)?.[1]||''));
+ const workflow=clean(section(text,['workflow','flow','steps','process'])||(/\bwhere\s+(?:they|users?|people)\s+(.+?)(?=\.(?!\d)|[!?]|\s+It should|\s+No\b|$)/i.exec(text)?.[1]||''));
  const screenText=section(text,['screens','pages','views'])||[...text.matchAll(/\b([a-z][\w ]*?)\s+screen\b/gi)].map(m=>m[1].replace(/^(?:It should have|it has|include)\s+(?:a|an|the)\s+/i,'')).join(', ');
- const naturalFeatures=(/\bwhere\s+(?:they|users?|people)\s+(.+?)(?=\.|\s+It should|\s+No\b|$)/i.exec(text)?.[1]||'').replace(/\b(and|then)\b/gi,',');
- const includeFeatures=(/\b(?:also\s+)?include(?:s|d)?\s+(.+?)(?=\.|$)/i.exec(text)?.[1]||'');
- const hasFeatures=(/\b(?:also\s+)?(?:should\s+have|has)\s+(.+?)(?=\.|$)/i.exec(text)?.[1]||'');
- const alsoFeatures=(/(?:^|[.!?]\s*)(?:and\s+)?also\s+(?!include\b)(.+?)(?=\.|$)/i.exec(text)?.[1]||'');
+ const naturalFeatures=(/\bwhere\s+(?:they|users?|people)\s+(.+?)(?=\.(?!\d)|[!?]|\s+It should|\s+No\b|$)/i.exec(text)?.[1]||'').replace(/\b(and|then)\b/gi,',');
+ const includeFeatures=(/\b(?:also\s+)?include(?:s|d)?\s+(.+?)(?=\.(?!\d)|[!?]|$)/i.exec(text)?.[1]||'');
+ const hasFeatures=(/\b(?:also\s+)?(?:should\s+have|has)\s+(.+?)(?=\.(?!\d)|[!?]|$)/i.exec(text)?.[1]||'');
+ const alsoFeatures=(/(?:^|[.!?]\s*)(?:and\s+)?also\s+(?!include\b)(.+?)(?=\.(?!\d)|[!?]|$)/i.exec(text)?.[1]||'');
  const explicitRequired=section(text,['required features','must have','required','features','include']);
  const requiredParts=explicitRequired?[explicitRequired]:[naturalFeatures,purposeClause,includeFeatures,hasFeatures,alsoFeatures].filter(Boolean);
  const requiredText=requiredParts.join(', ');
- const optionalText=section(text,['optional features','optional'])||((/\boptional(?:ly)?\s+(.+?)(?=\.|$)/i.exec(text)?.[1])||'');
+ const optionalText=section(text,['optional features','optional'])||((/\boptional(?:ly)?\s+(.+?)(?=\.(?!\d)|[!?]|$)/i.exec(text)?.[1])||'');
  const exclusionMatches=[...text.matchAll(/(?:do not|don't|without|no)\s+([^.;,]+)/gi)].map(m=>clean(m[1]));
  const rawRequired=unique(list(requiredText));const excludedRequired=rawRequired.filter(x=>exclusionMatches.some(e=>x.toLowerCase().includes(e.toLowerCase())||e.toLowerCase().includes(x.toLowerCase())));if(excludedRequired.length)throw Error(`Required feature excluded: ${excludedRequired.join(', ')}`);const required=rawRequired;
  const optional=list(optionalText), duplicates=required.filter(x=>optional.some(y=>y.toLowerCase()===x.toLowerCase()));
  if(duplicates.length) throw Error(`Contradictory required and optional feature: ${duplicates.join(', ')}`);
- const persistence=section(text,['persistence','data','storage'])||((/\b(save|store|persist|keep)\s+([^.!?]+)/i.exec(text)?.[0])||'');
+ const persistence=section(text,['persistence','data','storage'])||((/\b(save|store|persist|keep)\s+(.+?)(?=\.(?!\d)|[!?]|$)/i.exec(text)?.[0])||'');
  return freeze({appName:name||clean(product.split(/\s+for\s+/i)[0]),primaryJob:product,targetUser:target,platform,workflow,screens:list(screenText),requiredFeatures:required,optionalFeatures:optional,stateRules:list(section(text,['states','behavior','interactions'])||''),persistenceRules:list(persistence),visualRequirements:list(section(text,['visual','layout','style'])||''),constraints:list(section(text,['constraints','constraint'])||''),explicitExclusions:exclusionMatches,lockedInstructions:[text]});
 }
 export function compile(raw:string, options:GenerateOptions={}):Prompt {
