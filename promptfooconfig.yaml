@@ -13,6 +13,12 @@ tests:
       - type: contains
         value: 'Main Workflow'
       - type: contains
+        value: 'add task'
+      - type: contains
+        value: 'Android'
+      - type: contains
+        value: 'Do Not Add'
+      - type: contains
         value: 'task entry'
       - type: contains
         value: 'reminders'
