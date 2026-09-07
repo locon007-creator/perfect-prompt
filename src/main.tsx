@@ -15,7 +15,7 @@ function Icon({name}: {name:IconName}){
   sparkle:<><path d="M12 2l1.5 4.5L18 8l-4.5 1.5L12 14l-1.5-4.5L6 8l4.5-1.5L12 2z"/><path d="M19 14l.8 2.2L22 17l-2.2.8L19 20l-.8-2.2L16 17l2.2-.8L19 14z"/></>,
   copy:<><rect x="8" y="8" width="11" height="12" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h2"/></>,
   save:<><path d="M6 3h12v18l-6-4-6 4V3z"/></>,
-  bulb:<><path d="M9 18h6M10 22h4"/><path d="M8.5 14.5A6 6 0 1 1 15.5 14.5c-.9.8-1.5 1.7-1.5 3h-4c0-1.3-.6-2.2-1.5-3z"/><path d="M12 2V.8M4.9 4.9 4 4M19.1 4.9 20 4M3 12H1.7M22.3 12H21"/>,
+  bulb:<><path d="M9 18h6M10 22h4"/><path d="M8.5 14.5A6 6 0 1 1 15.5 14.5c-.9.8-1.5 1.7-1.5 3h-4c0-1.3-.6-2.2-1.5-3z"/><path d="M12 2V.8M4.9 4.9 4 4M19.1 4.9 20 4M3 12H1.7M22.3 12H21"/></>,
   phone:<><rect x="6" y="3" width="12" height="18" rx="2"/><path d="M10 18h4"/></>,
   tool:<><path d="M14.7 6.3a4 4 0 0 0-5 5L4 17l3 3 5.7-5.7a4 4 0 0 0 5-5l-2.2 2.2-3-3 2.2-2.2z"/></>,
   chart:<><path d="M5 20V10M12 20V4M19 20v-7"/></>,
@@ -93,5 +93,3 @@ function App(){
 }
 
 createRoot(document.getElementById('root')!).render(<App/>);
-
-// refresh Vercel preview for the corrected visual branch
