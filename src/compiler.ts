@@ -168,6 +168,44 @@ const completionFor=(buildType?:BuildType)=>{
  }
 };
 
+const sentenceLine=(value:string)=>{const line=clean(value);return line?`${line[0].toUpperCase()}${line.slice(1)}.`:'';};
+const compactLines=(items:string[])=>unique(items.map(sentenceLine).filter(Boolean));
+const gerundActions:Record<string,string>={recording:'Record',tracking:'Track',managing:'Manage',organizing:'Organize',saving:'Save',calculating:'Calculate',logging:'Log',planning:'Plan',monitoring:'Monitor',keeping:'Keep',creating:'Create',entering:'Enter',reviewing:'Review',showing:'Show',handling:'Handle',using:'Use',capturing:'Capture',viewing:'View',checking:'Check',remembering:'Remember',comparing:'Compare',measuring:'Measure',listing:'List',editing:'Edit',storing:'Store',categorizing:'Categorize',budgeting:'Budget',scheduling:'Schedule'};
+const featureContext=(features:string[])=>{
+ const first=clean(features[0]||'');
+ const match=/^(?:recording|tracking|logging|saving|capturing)\s+(.+?)\s+start$/i.exec(first);
+ return match?.[1]?.trim()||'';
+};
+const featureLine=(feature:string,features:string[])=>{
+ const raw=clean(feature);
+ const context=featureContext(features);
+ const gerund=/^([a-z]+)\s+(.+)$/i.exec(raw);
+ if(gerund&&gerundActions[gerund[1].toLowerCase()]){
+  let object=gerund[2];
+  if(/\bstart$/i.test(object))object=`${object} time`;
+  return `${gerundActions[gerund[1].toLowerCase()]} ${object}.`;
+ }
+ if(/^end times?$/i.test(raw)&&context)return`Record ${context} end times.`;
+ if(/\b(?:weekly|monthly)\b.*\btotal\b/i.test(raw))return`Calculate and display ${raw}.`;
+ if(/\bdaily hours?\b/i.test(raw))return`Calculate ${raw}.`;
+ if(/\breminders?\b/i.test(raw))return`Set ${raw}.`;
+ if(/\bcategories?\b/i.test(raw))return`Assign ${raw}.`;
+ if(/\b(?:dates?|times?)\b/i.test(raw))return`Record ${raw}.`;
+ return sentenceLine(raw);
+};
+const canonical=(value:string)=>value.toLowerCase()
+ .replace(/\brecording\b/g,'record').replace(/\btracking\b/g,'track').replace(/\bsaving\b/g,'save')
+ .replace(/\bcalculating\b/g,'calculate').replace(/\blogging\b/g,'log').replace(/\borganizing\b/g,'organize')
+ .replace(/[^a-z0-9]+/g,' ').trim();
+const requirementCovered=(required:string,sectionText:string)=>canonical(sectionText).includes(canonical(required));
+const visualLines=(visual:string)=>compactLines(visual.split(';').map(x=>x.trim()).filter(Boolean));
+const audienceLines=(target:string)=>target.toLowerCase()==='the intended user'
+ ? ['Primary audience: the intended user.','Do not invent a more specific persona unless the locked idea provides one.']
+ : [`Primary audience: ${target}.`,'Keep product decisions grounded in this stated audience; do not broaden it to unrelated user groups.'];
+const platformLines=(platform:string)=>platform==='Not explicitly specified'
+ ? ['Platform / medium: Not explicitly specified.','Do not assume Android, iOS, or web unless the locked idea specifies it.']
+ : [`Platform / medium: ${platform}.`];
+
 export function parseIdea(raw:string):IdeaLock {
  const text=InputSchema.parse({idea:raw}).idea;
  const platform=/\b(ios|iphone|ipad)\b/i.test(text)?'iOS':/\bandroid\b/i.test(text)?'Android':/\b(?:responsive\s+web|web\s+app|website|browser|web)\b/i.test(text)?'responsive web':/\bmobile|phone\b/i.test(text)?'mobile':'Not explicitly specified';
@@ -222,13 +260,14 @@ export function compile(raw:string, options:GenerateOptions={}):Prompt {
  return {buildType:options.buildType,role,mission:missionFor(lock,options.buildType),lock,targetUser:lock.targetUser,platform:effectivePlatform(lock,options.buildType),workflow:lock.workflow,screens:[...lock.screens],features:[...lock.requiredFeatures],states:[...lock.stateRules,...lock.persistenceRules],visual,quality,constraints:[...lock.constraints],doNotAdd:[...lock.explicitExclusions],completion:completionFor(options.buildType)};
 }
 export function assemble(p:Prompt){
- const core=p.features.length?p.features.join('\n'):'Only features explicitly stated or directly required by the locked idea.';
- const states=p.states.length?p.states.join('\n'):stateFallback(p.buildType);
- const quality=p.quality.length?p.quality.join('\n'):'Follow only build-quality, branding, and motion requirements explicitly stated in the idea.';
- const constraints=p.constraints.length?p.constraints.join('\n'):'Follow only constraints explicitly stated in the locked idea.';
- const doNotAdd=p.doNotAdd.length?p.doNotAdd.join('\n'):doNotAddFallback(p.buildType);
+ const core=p.features.length?unique(p.features.map(x=>featureLine(x,p.features))).join('\n'):'Only features explicitly stated or directly required by the locked idea.';
+ const states=p.states.length?compactLines(p.states).join('\n'):stateFallback(p.buildType);
+ const quality=p.quality.length?compactLines(p.quality).join('\n'):'Follow only build-quality, branding, and motion requirements explicitly stated in the idea.';
+ const constraints=p.constraints.length?compactLines(p.constraints).join('\n'):'Follow only constraints explicitly stated in the locked idea.';
+ const doNotAdd=p.doNotAdd.length?compactLines(p.doNotAdd).join('\n'):doNotAddFallback(p.buildType);
  const structure=p.screens.length?p.screens.map((s,i)=>`${i+1}. ${s}`).join('\n'):structureFallback(p.buildType);
- return ['Role',p.role,'Product Mission',p.mission,'Idea Lock',`Project type: ${buildLabel(p.buildType)}\nProject name: ${p.lock.appName}\nPrimary job: ${p.lock.primaryJob}\nTarget user: ${p.lock.targetUser}\nPlatform / medium: ${p.platform}\nLocked instruction: ${p.lock.lockedInstructions.join(' ')}`,'Target User',p.targetUser,'Platform',p.platform,'Main Workflow',p.workflow||workflowFallback(p.buildType),'Structure Requirements',structure,'Core Features',core,'Interaction & State Rules',states,'Visual Direction',p.visual||'Follow only visual requirements stated in the idea.','Build Quality & Brand Experience',quality,'Constraints',constraints,'Do Not Add',doNotAdd,'Completion Standard',p.completion].join('\n\n');
+ const visual=p.visual?visualLines(p.visual).join('\n'):'Follow only visual requirements stated in the idea.';
+ return ['Role',p.role,'Product Mission',p.mission,'Idea Lock',`Project type: ${buildLabel(p.buildType)}\nProject name: ${p.lock.appName}\nPrimary job: ${p.lock.primaryJob}\nTarget user: ${p.lock.targetUser}\nPlatform / medium: ${p.platform}\nLocked instruction: ${p.lock.lockedInstructions.join(' ')}`,'Target User',audienceLines(p.targetUser).join('\n'),'Platform',platformLines(p.platform).join('\n'),'Main Workflow',p.workflow||workflowFallback(p.buildType),'Structure Requirements',structure,'Core Features',core,'Interaction & State Rules',states,'Visual Direction',visual,'Build Quality & Brand Experience',quality,'Constraints',constraints,'Do Not Add',doNotAdd,'Completion Standard',p.completion].join('\n\n');
 }
 export function validateContradictions(p:Prompt,output:string){const lock=p.lock, lower=output.toLowerCase(); const workflow=output.split('Main Workflow')[1]?.split('Structure Requirements')[0]||''; const structures=output.split('Structure Requirements')[1]?.split('Core Features')[0]||''; const core=output.split('Core Features')[1]?.split('Interaction & State Rules')[0]||''; const optional=lock.optionalFeatures.join(' ').toLowerCase();
  if(lock.workflow && !workflow.toLowerCase().includes(lock.workflow.toLowerCase())) throw Error('Workflow altered or missing');
@@ -237,10 +276,10 @@ export function validateContradictions(p:Prompt,output:string){const lock=p.lock
  const listed=[...structures.matchAll(/(?:^|\n)\s*\d+\.\s*([^\n]+)/g)].map(m=>clean(m[1])); const allowed=[...lock.screens,...lock.workflow.split(/→|->|,|;|\band\b|\bthen\b/gi).map(clean)]; for(const item of listed)if(!allowed.some(x=>x.toLowerCase()===item.toLowerCase()))throw Error(`Invented structure: ${item}`);
  const platformSection=output.split('Platform')[1]?.split('Main Workflow')[0]||'';if(!platformSection.includes(p.platform))throw Error('Platform conflict');
  for(const req of lock.persistenceRules)if(!lower.includes(req.toLowerCase()))throw Error(`Persistence requirement missing: ${req}`);
- for(const req of lock.requiredFeatures){if(lock.explicitExclusions.some(x=>x.toLowerCase().includes(req.toLowerCase())||req.toLowerCase().includes(x.toLowerCase())))throw Error(`Required feature excluded: ${req}`);if(optional.includes(req.toLowerCase()))throw Error(`Required feature optional: ${req}`);if(!core.toLowerCase().includes(req.toLowerCase()))throw Error(`Required feature missing: ${req}`);}
+ for(const req of lock.requiredFeatures){if(lock.explicitExclusions.some(x=>x.toLowerCase().includes(req.toLowerCase())||req.toLowerCase().includes(x.toLowerCase())))throw Error(`Required feature excluded: ${req}`);if(optional.includes(req.toLowerCase()))throw Error(`Required feature optional: ${req}`);if(!requirementCovered(req,core))throw Error(`Required feature missing: ${req}`);}
  for(const opt of lock.optionalFeatures)if(core.toLowerCase().includes(opt.toLowerCase()))throw Error(`Optional feature promoted: ${opt}`);
  for(const x of lock.explicitExclusions)if([workflow,structures,core].join(' ').toLowerCase().includes(x.toLowerCase()))throw Error(`Exclusion violation: ${x}`);
  for(const x of lock.lockedInstructions)if(!lower.includes(x.toLowerCase()))throw Error('Locked instruction contradicted');
  return true;}
-export function validate(p:Prompt,output:string){const sections=['Role','Product Mission','Idea Lock','Target User','Platform','Main Workflow','Structure Requirements','Core Features','Interaction & State Rules','Visual Direction','Build Quality & Brand Experience','Constraints','Do Not Add','Completion Standard'];const missing=sections.filter(x=>!output.includes(x));if(missing.length)throw Error(`Missing sections: ${missing.join(', ')}`);const positive=[p.workflow,...p.screens,...p.features,...p.states,p.visual,...p.constraints].join(' ').toLowerCase();for(const x of p.lock.explicitExclusions)if(positive.includes(x.toLowerCase()))throw Error(`Exclusion violation: ${x}`);for(const x of p.lock.requiredFeatures)if(!output.toLowerCase().includes(x.toLowerCase()))throw Error(`Missing locked requirement: ${x}`);return validateContradictions(p,output);}
+export function validate(p:Prompt,output:string){const sections=['Role','Product Mission','Idea Lock','Target User','Platform','Main Workflow','Structure Requirements','Core Features','Interaction & State Rules','Visual Direction','Build Quality & Brand Experience','Constraints','Do Not Add','Completion Standard'];const missing=sections.filter(x=>!output.includes(x));if(missing.length)throw Error(`Missing sections: ${missing.join(', ')}`);const positive=[p.workflow,...p.screens,...p.features,...p.states,p.visual,...p.constraints].join(' ').toLowerCase();for(const x of p.lock.explicitExclusions)if(positive.includes(x.toLowerCase()))throw Error(`Exclusion violation: ${x}`);const core=output.split('Core Features')[1]?.split('Interaction & State Rules')[0]||'';for(const x of p.lock.requiredFeatures)if(!requirementCovered(x,core))throw Error(`Missing locked requirement: ${x}`);return validateContradictions(p,output);}
 export const generate=(raw:string,options:GenerateOptions={})=>{const p=compile(raw,options),out=assemble(p);validate(p,out);return out;};
