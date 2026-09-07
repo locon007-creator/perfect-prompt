@@ -35,4 +35,10 @@ describe('natural language parser regression', () => {
     expect(prompt.targetUser).toBe('homeowners');
     expect(prompt.features.join(' ').toLowerCase()).toContain('record repairs');
   });
+
+  it('separates an audience from a that-purpose clause', () => {
+    const prompt = compile('Create a household planner for families that want to organize chores and review weekly responsibilities.');
+    expect(prompt.targetUser).toBe('families');
+    expect(prompt.features.join(' ').toLowerCase()).toContain('organize chores');
+  });
 });
