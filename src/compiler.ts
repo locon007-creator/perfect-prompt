@@ -21,6 +21,8 @@ const sentenceBody='((?:[^.!?]|\\.(?=\\d))+)' ;
 const section=(text:string, labels:string[])=>{const r=new RegExp(`(?:${labels.join('|')})\\s*[:\\-]\\s*${sentenceBody}`,'i');return r.exec(text)?.[1]?.trim()};
 const purposeLead=/^(?:recording|tracking|managing|organizing|saving|calculating|logging|planning|monitoring|keeping|creating|entering|reviewing|showing|handling|using)\b/i;
 const unique=(items:string[])=>items.filter((item,index)=>items.findIndex(other=>other.toLowerCase()===item.toLowerCase())===index);
+const negativeLead=/^(?:do not|don't|without|no)\b/i;
+const stripInlineNegative=(item:string)=>clean(item.replace(/\s+(?:(?:but\s+)?without|with\s+no|but\s+no)\s+.+$/i,''));
 const buildLabel=(buildType?:BuildType)=>buildType?getSpecialistProfile(buildType).label:'Unspecified';
 const explicitGamePlatform=(lock:IdeaLock)=>{
  const raw=lock.lockedInstructions.join(' ');
@@ -121,7 +123,7 @@ export function parseIdea(raw:string):IdeaLock {
  const requiredText=requiredParts.join(', ');
  const optionalText=section(text,['optional features','optional'])||((/\boptional(?:ly)?\s+(.+?)(?=\.(?!\d)|[!?]|$)/i.exec(text)?.[1])||'');
  const exclusionMatches=[...text.matchAll(/(?:do not|don't|without|no)\s+([^.;,]+)/gi)].map(m=>clean(m[1]));
- const rawRequired=unique(list(requiredText));const excludedRequired=rawRequired.filter(x=>exclusionMatches.some(e=>x.toLowerCase().includes(e.toLowerCase())||e.toLowerCase().includes(x.toLowerCase())));if(excludedRequired.length)throw Error(`Required feature excluded: ${excludedRequired.join(', ')}`);const required=rawRequired;
+ const rawRequired=unique(list(requiredText).filter(item=>!negativeLead.test(item)).map(stripInlineNegative).filter(Boolean));const excludedRequired=rawRequired.filter(x=>exclusionMatches.some(e=>x.toLowerCase().includes(e.toLowerCase())||e.toLowerCase().includes(x.toLowerCase())));if(excludedRequired.length)throw Error(`Required feature excluded: ${excludedRequired.join(', ')}`);const required=rawRequired;
  const optional=list(optionalText), duplicates=required.filter(x=>optional.some(y=>y.toLowerCase()===x.toLowerCase()));
  if(duplicates.length) throw Error(`Contradictory required and optional feature: ${duplicates.join(', ')}`);
  const persistence=section(text,['persistence','data','storage'])||((/\b(save|store|persist|keep)\s+(.+?)(?=\.(?!\d)|[!?]|$)/i.exec(text)?.[0])||'');
