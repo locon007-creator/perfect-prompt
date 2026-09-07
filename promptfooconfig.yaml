@@ -1,3 +1,24 @@
 description: Perfect Prompt compiler regression evaluation
-providers: [{id: 'file://src/eval-provider.ts'}]
-tests: [{description: 'structured output', vars: {idea: 'Build a grocery list for busy parents'}, assert: [{type: contains, value: 'Completion Standard'}]}]
+prompts:
+  - '{{idea}}'
+providers:
+  - id: 'file://src/eval-provider.ts'
+tests:
+  - description: structured output and fidelity
+    vars:
+      idea: 'Build a habit tracker for students on Android. Workflow: add habit, mark complete, view streak. Screens: Habits, Streaks. Required features: habit tracking. No social feed.'
+    assert:
+      - type: contains
+        value: 'Primary job'
+      - type: contains
+        value: 'Main Workflow'
+      - type: contains
+        value: 'habit tracking'
+      - type: contains
+        value: 'social feed'
+      - type: contains
+        value: 'Screen Requirements'
+      - type: contains
+        value: 'Completion Standard'
+      - type: javascript
+        value: '!output.match(/Home \/ primary|Success \/ confirmation|Details or editor/i)'
