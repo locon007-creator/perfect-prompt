@@ -14,6 +14,7 @@ export type IdeaLock = Readonly<{
   constraints: readonly string[]; explicitExclusions: readonly string[]; lockedInstructions: readonly string[];
 }>;
 export type Prompt = { buildType?:BuildType; role:string; mission:string; lock:IdeaLock; targetUser:string; platform:string; workflow:string; screens:string[]; features:string[]; states:string[]; visual:string; constraints:string[]; doNotAdd:string[]; completion:string };
+
 const freeze = <T>(value:T):Readonly<T> => { if(value && typeof value==='object' && !Object.isFrozen(value)){Object.freeze(value); for(const v of Object.values(value as object)) freeze(v);} return value as Readonly<T>; };
 const clean=(s:string)=>s.replace(/[.!?]+$/,'').trim();
 const list=(s:string|undefined)=>s? s.split(/,|;|\n|\band\b/gi).map(clean).filter(Boolean):[];
@@ -22,9 +23,72 @@ const section=(text:string, labels:string[])=>{const r=new RegExp(`(?:${labels.j
 const purposeLead=/^(?:recording|tracking|managing|organizing|saving|calculating|logging|planning|monitoring|keeping|creating|entering|reviewing|showing|handling|using)\b/i;
 const unique=(items:string[])=>items.filter((item,index)=>items.findIndex(other=>other.toLowerCase()===item.toLowerCase())===index);
 const negativeLead=/^(?:do not|don't|without|no)\b/i;
-const stripInlineNegative=(item:string)=>clean(item.replace(/\s+(?:(?:but\s+)?without|with\s+no|but\s+no)\s+.+$/i,''));
-const positiveList=(value:string|undefined)=>unique(list(value).filter(item=>!negativeLead.test(item)).map(stripInlineNegative).filter(Boolean));
+const stripInlineNegative=(item:string)=>clean(item.replace(/\s*(?:[.;]\s*)?(?:(?:but\s+)?without|with\s+no|but\s+no|do not|don't|no)\s+.+$/i,''));
+const positiveList=(value:string|undefined)=>{if(!value)return[];const positiveOnly=stripInlineNegative(value);return unique(list(positiveOnly).filter(item=>!negativeLead.test(item)).map(clean).filter(Boolean));};
 const positiveText=(value:string)=>stripInlineNegative(clean(value));
+const sentenceUnits=(text:string)=>unique([
+  ...text.split(/\r?\n/).map(clean).filter(Boolean),
+  ...(text.match(/(?:[^.!?]|\.(?=\d))+(?:[.!?]|$)/g)||[]).map(clean).filter(Boolean),
+]);
+const splitNegativeItems=(value:string)=>positiveList(value.replace(/\bor\b/gi,',').replace(/^(?:add|include|use|create|show|enable|allow)\s+/i,''))
+  .map(item=>item.replace(/^(?:a|an|the)\s+/i,'').trim()).filter(Boolean);
+const extractExclusions=(text:string)=>{
+ const items:string[]=[];
+ const patterns=[/\bwithout\s+([^.;]+)/gi,/\b(?:do not|don't)\s+([^.;]+)/gi,/\bno\s+([^.;]+)/gi];
+ for(const pattern of patterns)for(const match of text.matchAll(pattern))items.push(...splitNegativeItems(match[1]||''));
+ return unique(items);
+};
+const extractWorkflow=(text:string)=>{
+ const nextLine=/(?:^|\n)\s*(?:main\s+)?(?:workflow|flow|steps|process)\s*:\s*\r?\n\s*([^\r\n]+)/i.exec(text)?.[1];
+ if(nextLine)return positiveText(nextLine);
+ return positiveText(section(text,['main workflow','workflow','flow','steps','process'])||(/\bwhere\s+(?:they|users?|people)\s+(.+?)(?=\.(?!\d)|[!?]|\s+It should|\s+No\b|$)/i.exec(text)?.[1]||''));
+};
+const extractStructures=(text:string,workflow:string)=>{
+ const explicitSection=section(text,['screens','pages','views']);
+ if(explicitSection)return positiveList(explicitSection);
+ const found:string[]=[];
+ const explicitMentions:string[]=[];
+ for(const match of text.matchAll(/\b([a-z][\w ]*?)\s+(?:screen|page|view)\b/gi)){
+  const value=match[1]
+   .replace(/^(?:and\s+)?/i,'')
+   .replace(/^(?:It should have|it has|include|also include)\s+(?:a|an|the)\s+/i,'')
+   .replace(/^(?:a|an|the)\s+/i,'')
+   .trim();
+  if(value){explicitMentions.push(value);found.push(value);}
+ }
+ if(explicitMentions.length<2)for(const stage of workflow.split(/→|->|,|;|\bthen\b/gi).map(clean).filter(Boolean))found.push(stage);
+ for(const unit of sentenceUnits(text)){
+  const subject=/^([A-Z][A-Za-z0-9 &/+-]{0,48}?)\s+should\b/.exec(unit)?.[1]?.trim();
+  if(subject && !/^(?:the app|the site|the game|the product|it)$/i.test(subject))found.push(subject);
+  const include=/^(?:also\s+)?include\s+(.+?)(?:\s+so\b|$)/i.exec(unit)?.[1];
+  if(include){
+   for(const item of include.split(/,|\band\b/gi).map(clean).filter(Boolean)){
+    const candidate=item.replace(/^(?:a|an|the)\s+/i,'').replace(/\s+(?:screen|page|view)\b.*$/i,'').trim();
+    if(/^[A-Z]/.test(candidate))found.push(candidate);
+   }
+  }
+  if(/^Allow\s+(?:the\s+)?user\s+to\s+(?:set|configure|choose|manage)\b/i.test(unit))found.push('Settings');
+ }
+ return unique(found.map(x=>clean(x)).filter(Boolean));
+};
+const requirementSentence=/^(?:when\b|show\b|allow\b|use\b|(?:also\s+)?include\b|[A-Z][A-Za-z0-9 &/+-]{0,48}\s+should\b)/i;
+const extractNaturalRequirements=(text:string)=>sentenceUnits(text)
+ .filter(unit=>requirementSentence.test(unit))
+ .map(positiveText)
+ .filter(unit=>unit && !negativeLead.test(unit));
+const extractNaturalStates=(text:string)=>sentenceUnits(text)
+ .filter(unit=>/^when\b/i.test(unit))
+ .map(positiveText).filter(Boolean);
+const extractPersistence=(text:string)=>{
+ const explicit=section(text,['persistence','data','storage']);
+ const found=explicit?[explicit]:sentenceUnits(text).filter(unit=>/^(?:use\b.*\bstorage\b|(?:save|store|persist|keep)\b)/i.test(unit)||/\b(?:save|store|persist)\b.+\b(?:entry|data|history|state|settings|totals?|records?)\b/i.test(unit));
+ return unique(found.flatMap(value=>positiveList(value)));
+};
+const extractConstraints=(text:string)=>{
+ const explicit=positiveList(section(text,['constraints','constraint'])||'');
+ const natural=sentenceUnits(text).filter(unit=>/^Target\b/i.test(unit)||/^Keep\s+it\s+strictly\b/i.test(unit)).map(positiveText);
+ return unique([...explicit,...natural]);
+};
 const buildLabel=(buildType?:BuildType)=>buildType?getSpecialistProfile(buildType).label:'Unspecified';
 const explicitGamePlatform=(lock:IdeaLock)=>{
  const raw=lock.lockedInstructions.join(' ');
@@ -102,10 +166,13 @@ const completionFor=(buildType?:BuildType)=>{
   default:return'Every locked requirement is implemented, the stated workflow is preserved, and no unrequested screens or features are added.';
  }
 };
+
 export function parseIdea(raw:string):IdeaLock {
  const text=InputSchema.parse({idea:raw}).idea;
  const platform=/\b(ios|iphone|ipad)\b/i.test(text)?'iOS':/\bandroid\b/i.test(text)?'Android':/\bmobile|phone\b/i.test(text)?'mobile':'responsive web';
- const name=(/\b(?:called|named)\s+["“]?([^"”.,]+)/i.exec(text)?.[1]||'').trim();
+ const quotedName=/\b(?:called|named)\s+["“]([^"”]+)["”]/i.exec(text)?.[1];
+ const unquotedName=/\b(?:called|named)\s+(.+?)(?=\s+for\b|\s+where\b|\s+that\b|\s+on\b|[.,;!?]|$)/i.exec(text)?.[1];
+ const name=clean((quotedName||unquotedName||'').trim());
  const product=clean((/\b(?:build|create|make|design)\s+(?:a|an|the)\s+(.+?)(?=\s+for\s+|\s+where\s+|\s+that\s+|\s+on\s+|\.|$)/i.exec(text)?.[1]||text));
  const targeted=(/\btarget(?:ed)?\s+at\s+([^.;]+?)(?=\s+(?:where|that|on|with|which)\b|[.!?]|$)/i.exec(text)?.[1]||'').trim();
  const forClause=(/\bfor\s+([^.;]+?)(?=\s+(?:where|on|with|which)\b|[.!?]|$)/i.exec(text)?.[1]||'').trim();
@@ -113,24 +180,31 @@ export function parseIdea(raw:string):IdeaLock {
  const audienceClause=(audiencePurposeMatch?.[1]||'').trim();
  const audiencePurpose=(audiencePurposeMatch?.[2]||'').trim();
  const purposeClause=purposeLead.test(forClause)?forClause:audiencePurpose;
- const target=clean(targeted||audienceClause||(!purposeClause&&forClause?forClause:'the intended user'));
- const workflow=positiveText(section(text,['workflow','flow','steps','process'])||(/\bwhere\s+(?:they|users?|people)\s+(.+?)(?=\.(?!\d)|[!?]|\s+It should|\s+No\b|$)/i.exec(text)?.[1]||''));
- const screenText=section(text,['screens','pages','views'])||[...text.matchAll(/\b([a-z][\w ]*?)\s+screen\b/gi)].map(m=>m[1].replace(/^(?:It should have|it has|include)\s+(?:a|an|the)\s+/i,'')).join(', ');
+ const target=clean(targeted||audienceClause||(!purposeClause&&forClause?forClause:'the intended user'))||'the intended user';
+ const workflow=extractWorkflow(text);
+ const screens=extractStructures(text,workflow);
  const naturalFeatures=(/\bwhere\s+(?:they|users?|people)\s+(.+?)(?=\.(?!\d)|[!?]|\s+It should|\s+No\b|$)/i.exec(text)?.[1]||'').replace(/\b(and|then)\b/gi,',');
  const includeFeatures=(/\b(?:also\s+)?include(?:s|d)?\s+(.+?)(?=\.(?!\d)|[!?]|$)/i.exec(text)?.[1]||'');
  const hasFeatures=(/\b(?:also\s+)?(?:should\s+have|has)\s+(.+?)(?=\.(?!\d)|[!?]|$)/i.exec(text)?.[1]||'');
  const alsoFeatures=(/(?:^|[.!?]\s*)(?:and\s+)?also\s+(?!include\b)(.+?)(?=\.(?!\d)|[!?]|$)/i.exec(text)?.[1]||'');
  const explicitRequired=section(text,['required features','must have','required','features','include']);
- const requiredParts=explicitRequired?[explicitRequired]:[naturalFeatures,purposeClause,includeFeatures,hasFeatures,alsoFeatures].filter(Boolean);
- const requiredText=requiredParts.join(', ');
+ const mainJob=positiveText(section(text,['one main job','main job','primary job','purpose'])||product);
+ const requiredParts=explicitRequired?[explicitRequired]:[naturalFeatures,purposeClause,mainJob,includeFeatures,hasFeatures,alsoFeatures].filter(Boolean);
+ const baselineRequired=positiveList(requiredParts.join(', '));
+ const required=explicitRequired?baselineRequired:unique([...baselineRequired,...extractNaturalRequirements(text)]);
  const optionalText=section(text,['optional features','optional'])||((/\boptional(?:ly)?\s+(.+?)(?=\.(?!\d)|[!?]|$)/i.exec(text)?.[1])||'');
- const exclusionMatches=[...text.matchAll(/(?:do not|don't|without|no)\s+([^.;,]+)/gi)].map(m=>clean(m[1]));
- const rawRequired=positiveList(requiredText);const excludedRequired=rawRequired.filter(x=>exclusionMatches.some(e=>x.toLowerCase().includes(e.toLowerCase())||e.toLowerCase().includes(x.toLowerCase())));if(excludedRequired.length)throw Error(`Required feature excluded: ${excludedRequired.join(', ')}`);const required=rawRequired;
+ const exclusions=extractExclusions(text);
+ const excludedRequired=required.filter(x=>exclusions.some(e=>x.toLowerCase().includes(e.toLowerCase())||e.toLowerCase().includes(x.toLowerCase())));
+ if(excludedRequired.length)throw Error(`Required feature excluded: ${excludedRequired.join(', ')}`);
  const optional=positiveList(optionalText), duplicates=required.filter(x=>optional.some(y=>y.toLowerCase()===x.toLowerCase()));
  if(duplicates.length) throw Error(`Contradictory required and optional feature: ${duplicates.join(', ')}`);
- const persistence=section(text,['persistence','data','storage'])||((/\b(save|store|persist|keep)\s+(.+?)(?=\.(?!\d)|[!?]|$)/i.exec(text)?.[0])||'');
- return freeze({appName:name||clean(product.split(/\s+for\s+/i)[0]),primaryJob:product,targetUser:target,platform,workflow,screens:list(screenText),requiredFeatures:required,optionalFeatures:optional,stateRules:positiveList(section(text,['states','behavior','interactions'])||''),persistenceRules:positiveList(persistence),visualRequirements:positiveList(section(text,['visual','layout','style'])||''),constraints:positiveList(section(text,['constraints','constraint'])||''),explicitExclusions:exclusionMatches,lockedInstructions:[text]});
+ const explicitStates=positiveList(section(text,['states','behavior','interactions'])||'');
+ const stateRules=unique([...explicitStates,...extractNaturalStates(text)]);
+ const persistenceRules=extractPersistence(text);
+ const constraints=extractConstraints(text);
+ return freeze({appName:name||clean(product.split(/\s+for\s+/i)[0]),primaryJob:mainJob,targetUser:target,platform,workflow,screens,requiredFeatures:required,optionalFeatures:optional,stateRules,persistenceRules,visualRequirements:positiveList(section(text,['visual','layout','style'])||''),constraints,explicitExclusions:exclusions,lockedInstructions:[text]});
 }
+
 export function compile(raw:string, options:GenerateOptions={}):Prompt {
  const lock=parseIdea(raw);
  const technicalRole=options.buildType?getSpecialistProfile(options.buildType).role:'You are a senior product designer and frontend engineer.';
@@ -153,9 +227,9 @@ export function assemble(p:Prompt){
 }
 export function validateContradictions(p:Prompt,output:string){const lock=p.lock, lower=output.toLowerCase(); const workflow=output.split('Main Workflow')[1]?.split('Structure Requirements')[0]||''; const structures=output.split('Structure Requirements')[1]?.split('Core Features')[0]||''; const core=output.split('Core Features')[1]?.split('Interaction & State Rules')[0]||''; const optional=lock.optionalFeatures.join(' ').toLowerCase();
  if(lock.workflow && !workflow.toLowerCase().includes(lock.workflow.toLowerCase())) throw Error('Workflow altered or missing');
- let cursor=-1; for(const step of lock.workflow.split(/,|;|\band\b|\bthen\b/gi).map(clean).filter(Boolean)){const at=workflow.toLowerCase().indexOf(step.toLowerCase());if(at<cursor)throw Error('Workflow reordered');if(at>=0)cursor=at;else throw Error(`Workflow step missing: ${step}`);}
+ let cursor=-1; for(const step of lock.workflow.split(/→|->|,|;|\band\b|\bthen\b/gi).map(clean).filter(Boolean)){const at=workflow.toLowerCase().indexOf(step.toLowerCase());if(at<cursor)throw Error('Workflow reordered');if(at>=0)cursor=at;else throw Error(`Workflow step missing: ${step}`);}
  for(const screen of lock.screens)if(!structures.toLowerCase().includes(screen.toLowerCase()))throw Error(`Required structure missing: ${screen}`);
- const listed=[...structures.matchAll(/(?:^|\n)\s*\d+\.\s*([^\n]+)/g)].map(m=>clean(m[1])); const allowed=[...lock.screens,...lock.workflow.split(/,|;|\band\b|\bthen\b/gi).map(clean)]; for(const item of listed)if(!allowed.some(x=>x.toLowerCase()===item.toLowerCase()))throw Error(`Invented structure: ${item}`);
+ const listed=[...structures.matchAll(/(?:^|\n)\s*\d+\.\s*([^\n]+)/g)].map(m=>clean(m[1])); const allowed=[...lock.screens,...lock.workflow.split(/→|->|,|;|\band\b|\bthen\b/gi).map(clean)]; for(const item of listed)if(!allowed.some(x=>x.toLowerCase()===item.toLowerCase()))throw Error(`Invented structure: ${item}`);
  const platformSection=output.split('Platform')[1]?.split('Main Workflow')[0]||'';if(!platformSection.includes(p.platform))throw Error('Platform conflict');
  for(const req of lock.persistenceRules)if(!lower.includes(req.toLowerCase()))throw Error(`Persistence requirement missing: ${req}`);
  for(const req of lock.requiredFeatures){if(lock.explicitExclusions.some(x=>x.toLowerCase().includes(req.toLowerCase())||req.toLowerCase().includes(x.toLowerCase())))throw Error(`Required feature excluded: ${req}`);if(optional.includes(req.toLowerCase()))throw Error(`Required feature optional: ${req}`);if(!core.toLowerCase().includes(req.toLowerCase()))throw Error(`Required feature missing: ${req}`);}
