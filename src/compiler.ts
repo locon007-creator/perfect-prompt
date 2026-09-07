@@ -20,7 +20,7 @@ const clean=(s:string)=>s.replace(/[.!?]+$/,'').trim();
 const list=(s:string|undefined)=>s? s.split(/,|;|\n|\band\b/gi).map(clean).filter(Boolean):[];
 const sentenceBody='((?:[^.!?]|\\.(?=\\d))+)' ;
 const section=(text:string, labels:string[])=>{const r=new RegExp(`(?:${labels.join('|')})\\s*[:\\-]\\s*${sentenceBody}`,'i');return r.exec(text)?.[1]?.trim()};
-const purposeLead=/^(?:recording|tracking|managing|organizing|saving|calculating|logging|planning|monitoring|keeping|creating|entering|reviewing|showing|handling|using)\b/i;
+const purposeLead=/^(?:(?:[a-z]+ly)\s+)*(?:recording|tracking|managing|organizing|saving|calculating|logging|planning|monitoring|keeping|creating|entering|reviewing|showing|handling|using|capturing|viewing|checking|remembering|comparing|measuring|listing|editing|storing|categorizing|budgeting|scheduling)\b/i;
 const unique=(items:string[])=>items.filter((item,index)=>items.findIndex(other=>other.toLowerCase()===item.toLowerCase())===index);
 const negativeLead=/^(?:do not|don't|without|no)\b/i;
 const stripInlineNegative=(item:string)=>clean(item.replace(/\s*(?:[.;]\s*)?(?:(?:but\s+)?without|with\s+no|but\s+no|do not|don't|no)\s+.+$/i,''));
@@ -92,6 +92,7 @@ const extractConstraints=(text:string)=>{
 const buildLabel=(buildType?:BuildType)=>buildType?getSpecialistProfile(buildType).label:'Unspecified';
 const explicitGamePlatform=(lock:IdeaLock)=>{
  const raw=lock.lockedInstructions.join(' ');
+ if(lock.platform==='Not explicitly specified')return'Game platform not specified';
  if(lock.platform!=='responsive web')return lock.platform;
  if(/\b(web|browser)\b/i.test(raw))return'Web';
  if(/\bdesktop\b/i.test(raw))return'Desktop';
@@ -169,17 +170,18 @@ const completionFor=(buildType?:BuildType)=>{
 
 export function parseIdea(raw:string):IdeaLock {
  const text=InputSchema.parse({idea:raw}).idea;
- const platform=/\b(ios|iphone|ipad)\b/i.test(text)?'iOS':/\bandroid\b/i.test(text)?'Android':/\bmobile|phone\b/i.test(text)?'mobile':'responsive web';
+ const platform=/\b(ios|iphone|ipad)\b/i.test(text)?'iOS':/\bandroid\b/i.test(text)?'Android':/\b(?:responsive\s+web|web\s+app|website|browser|web)\b/i.test(text)?'responsive web':/\bmobile|phone\b/i.test(text)?'mobile':'Not explicitly specified';
  const quotedName=/\b(?:called|named)\s+["“]([^"”]+)["”]/i.exec(text)?.[1];
  const unquotedName=/\b(?:called|named)\s+(.+?)(?=\s+for\b|\s+where\b|\s+that\b|\s+on\b|[.,;!?]|$)/i.exec(text)?.[1];
  const name=clean((quotedName||unquotedName||'').trim());
  const product=clean((/\b(?:build|create|make|design)\s+(?:a|an|the)\s+(.+?)(?=\s+for\s+|\s+where\s+|\s+that\s+|\s+on\s+|\.|$)/i.exec(text)?.[1]||text));
  const targeted=(/\btarget(?:ed)?\s+at\s+([^.;]+?)(?=\s+(?:where|that|on|with|which)\b|[.!?]|$)/i.exec(text)?.[1]||'').trim();
  const forClause=(/\bfor\s+([^.;]+?)(?=\s+(?:where|on|with|which)\b|[.!?]|$)/i.exec(text)?.[1]||'').trim();
- const audiencePurposeMatch=/^(.+?)\s+(?:to|who|that)\s+(.+)$/i.exec(forClause);
+ const directPurpose=purposeLead.test(forClause)?forClause:'';
+ const audiencePurposeMatch=directPurpose?null:/^(.+?)\s+(?:to|who|that)\s+(.+)$/i.exec(forClause);
  const audienceClause=(audiencePurposeMatch?.[1]||'').trim();
  const audiencePurpose=(audiencePurposeMatch?.[2]||'').trim();
- const purposeClause=purposeLead.test(forClause)?forClause:audiencePurpose;
+ const purposeClause=directPurpose||audiencePurpose;
  const target=clean(targeted||audienceClause||(!purposeClause&&forClause?forClause:'the intended user'))||'the intended user';
  const workflow=extractWorkflow(text);
  const screens=extractStructures(text,workflow);
@@ -188,7 +190,8 @@ export function parseIdea(raw:string):IdeaLock {
  const hasFeatures=(/\b(?:also\s+)?(?:should\s+have|has)\s+(.+?)(?=\.(?!\d)|[!?]|$)/i.exec(text)?.[1]||'');
  const alsoFeatures=(/(?:^|[.!?]\s*)(?:and\s+)?also\s+(?!include\b)(.+?)(?=\.(?!\d)|[!?]|$)/i.exec(text)?.[1]||'');
  const explicitRequired=section(text,['required features','must have','required','features','include']);
- const mainJob=positiveText(section(text,['one main job','main job','primary job','purpose'])||product);
+ const explicitMainJob=section(text,['one main job','main job','primary job','purpose']);
+ const mainJob=positiveText(explicitMainJob||purposeClause||product);
  const requiredParts=explicitRequired?[explicitRequired]:[naturalFeatures,purposeClause,mainJob,includeFeatures,hasFeatures,alsoFeatures].filter(Boolean);
  const baselineRequired=positiveList(requiredParts.join(', '));
  const required=explicitRequired?baselineRequired:unique([...baselineRequired,...extractNaturalRequirements(text)]);
