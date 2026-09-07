@@ -19,4 +19,20 @@ describe('natural language parser regression', () => {
     expect(features).toContain('hourly rate');
     expect(features).toContain('deductions');
   });
+
+  it('separates an audience from its to-purpose clause', () => {
+    const prompt = compile('Build a personal expense tracker for one person to record purchases, see daily and weekly spending totals, and review a monthly summary. And also category filters, recurring expense reminders, and settings for a monthly budget.');
+    expect(prompt.targetUser).toBe('one person');
+    const features = prompt.features.join(' ').toLowerCase();
+    expect(features).toContain('record purchases');
+    expect(features).toContain('daily');
+    expect(features).toContain('monthly summary');
+    expect(features).toContain('category filters');
+  });
+
+  it('separates plural audiences from a who-purpose clause', () => {
+    const prompt = compile('Create a home maintenance log for homeowners who want to record repairs and review maintenance history.');
+    expect(prompt.targetUser).toBe('homeowners');
+    expect(prompt.features.join(' ').toLowerCase()).toContain('record repairs');
+  });
 });
