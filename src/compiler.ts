@@ -210,7 +210,6 @@ const featureLine=(feature:string,features:string[],workflow='')=>{
  if(history&&/previous workdays can be reviewed and edited/i.test(history[1]))return'Provide History for reviewing and editing previous workdays.';
  const timeFormat=/^Allow the user to set their preferred time format$/i.exec(raw);
  if(timeFormat)return'Allow the user to choose their preferred time format.';
- if(/^Save all\s+(.+?)\s+locally so\s+(.+?)\s+survive app restarts$/i.test(raw))return sentenceLine(raw.replace(/^Save all\s+/i,'Persist all ').replace(/\s+so\s+.+?\s+survive app restarts$/i,' locally across app restarts'));
  if(/^(?:show|include|provide|allow|use|save|persist|track|record|calculate|set|assign)\b/i.test(raw))return sentenceLine(raw);
  const gerund=/^([a-z]+)\s+(.+)$/i.exec(raw);
  if(gerund&&gerundActions[gerund[1].toLowerCase()]){
@@ -260,9 +259,13 @@ const combineWeeklyView=(lines:string[])=>{
  const combined=`Show a ${workweek} Weekly view with daily hours and the weekly total.`;
  return lines.filter((_,index)=>index!==viewIndex&&index!==totalIndex).concat(combined);
 };
-const semanticFeatureLines=(features:string[],workflow:string,persistence:string[])=>{
- const rawLines=[...features,...persistence].map(feature=>featureLine(feature,features,workflow)).filter(Boolean);
- return dedupeSemanticLines(combineWeeklyView(rawLines));
+const semanticFeatureLines=(features:string[],workflow:string,constraints:string[])=>{
+ const rawLines=features
+  .filter(feature=>!constraints.some(constraint=>canonical(feature)===canonical(constraint)))
+  .map(feature=>featureLine(feature,features,workflow))
+  .filter(Boolean);
+ const firstPass=dedupeSemanticLines(rawLines);
+ return dedupeSemanticLines(combineWeeklyView(firstPass));
 };
 const semanticRequirementCovered=(required:string,core:string,states:string,features:string[],workflow:string)=>{
  const normalized=featureLine(required,features,workflow);
@@ -335,7 +338,7 @@ export function compile(raw:string, options:GenerateOptions={}):Prompt {
  return {buildType:options.buildType,creationFormat:options.creationFormat,formatLabel:formatProfile.label,formatGuidance:[...formatProfile.guidance],role,mission:missionFor(lock,options.buildType),lock,targetUser:lock.targetUser,platform:effectivePlatform(lock,options.buildType,options.creationFormat),workflow:lock.workflow,screens:[...lock.screens],features:[...lock.requiredFeatures],states:[...lock.stateRules,...lock.persistenceRules],visual,quality,constraints:[...lock.constraints],doNotAdd:[...lock.explicitExclusions],completion:completionFor(options.buildType)};
 }
 export function assemble(p:Prompt){
- const coreLines=semanticFeatureLines(p.features,p.workflow,[...p.lock.persistenceRules]);
+ const coreLines=semanticFeatureLines(p.features,p.workflow,p.constraints);
  const core=coreLines.length?coreLines.join('\n'):'Only features explicitly stated or directly required by the locked idea.';
  const states=p.states.length?p.states.join('\n'):stateFallback(p.buildType);
  const quality=p.quality.length?compactLines(p.quality).join('\n'):'Follow only build-quality, branding, and motion requirements explicitly stated in the idea.';
@@ -351,7 +354,7 @@ export function validateContradictions(p:Prompt,output:string){const lock=p.lock
  for(const screen of lock.screens)if(!structures.toLowerCase().includes(screen.toLowerCase()))throw Error(`Required structure missing: ${screen}`);
  const listed=[...structures.matchAll(/(?:^|\n)\s*\d+\.\s*([^\n]+)/g)].map(m=>clean(m[1])); const allowed=[...lock.screens,...lock.workflow.split(/→|->|,|;|\band\b|\bthen\b/gi).map(clean)]; for(const item of listed)if(!allowed.some(x=>x.toLowerCase()===item.toLowerCase()))throw Error(`Invented structure: ${item}`);
  const platformSection=output.split('Platform')[1]?.split('Main Workflow')[0]||'';if(!platformSection.includes(p.platform))throw Error('Platform conflict');
- for(const req of lock.persistenceRules)if(!lower.includes(req.toLowerCase())&&!semanticallyCovered(req,[core,states].join(' ')))throw Error(`Persistence requirement missing: ${req}`);
+ for(const req of lock.persistenceRules)if(!lower.includes(req.toLowerCase()))throw Error(`Persistence requirement missing: ${req}`);
  for(const req of lock.requiredFeatures){if(lock.explicitExclusions.some(x=>x.toLowerCase().includes(req.toLowerCase())||req.toLowerCase().includes(x.toLowerCase())))throw Error(`Required feature excluded: ${req}`);if(optional.includes(req.toLowerCase()))throw Error(`Required feature optional: ${req}`);if(!semanticRequirementCovered(req,core,states,p.features,p.workflow))throw Error(`Required feature missing: ${req}`);}
  for(const opt of lock.optionalFeatures)if(core.toLowerCase().includes(opt.toLowerCase()))throw Error(`Optional feature promoted: ${opt}`);
  for(const x of lock.explicitExclusions)if([workflow,structures,core].join(' ').toLowerCase().includes(x.toLowerCase()))throw Error(`Exclusion violation: ${x}`);
