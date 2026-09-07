@@ -57,6 +57,11 @@ const explicitStructureHeading = (text: string) => /(?:^|\n)\s*(?:screens|pages|
 const workflowAction = /^(?:punch\s+(?:in|out)|start\s+my\s+day|start\s+route|day\s+complete|finish\s+day|start\s+(?:work|shift)|end\s+(?:work|shift)|save|submit|continue|cancel|finish|complete|confirm)$/i;
 const behaviorLikeStructure = /\b(?:opens?|shows?|allows?|pressing|tapping|tap|clicking|use|provide)\b/i;
 const settingsOptionStructure = /^(?:theme(?:\s+with\s+.*)?|light|dark|automatic|auto|time\s*format|date\s*format|payment preferences?)$/i;
+const workflowViews = (workflow: string) => workflow
+  .split(/→|->|,|;|\band\b|\bthen\b/gi)
+  .map(clean)
+  .filter(Boolean)
+  .filter(step => !workflowAction.test(step) && !behaviorLikeStructure.test(step) && !settingsOptionStructure.test(step));
 const cleanStructures = (text: string, screens: readonly string[]) => {
   if (explicitStructureHeading(text)) return unique([...screens].filter(screen => !settingsOptionStructure.test(clean(screen))));
   return unique([...screens].filter(screen => !workflowAction.test(clean(screen)) && !behaviorLikeStructure.test(screen) && !settingsOptionStructure.test(clean(screen))));
@@ -209,7 +214,7 @@ const missionFor = (base: Prompt, lock: IdeaLock, buildType?: BuildType) => {
 export function parseIdea(raw: string): IdeaLock {
   const text = InputSchema.parse({ idea: raw }).idea;
   const base = legacy.parseIdea(text);
-  const screens = cleanStructures(text, base.screens);
+  const screens = cleanStructures(text, unique([...base.screens, ...workflowViews(base.workflow)]));
   const continuity = extractContinuityRules(text);
   let baseRequired = [...base.requiredFeatures];
   if (continuity.length) baseRequired = baseRequired.filter(item => !/pickup trailer|drop trailer|continues through the route/i.test(item));
@@ -248,9 +253,7 @@ export function compile(raw: string, options: GenerateOptions = {}): PromptWithS
   const inferred = options.buildType === 'app-web-app'
     ? inferMinimumViableProduct(raw, lock, options.creationFormat || 'idea-decides')
     : { features: [], screens: [], states: [] };
-  const features = inferred.features.length
-    ? unique([...removeProductEcho(lock.requiredFeatures, lock), ...inferred.features])
-    : [...lock.requiredFeatures];
+  const features = unique([...removeProductEcho(lock.requiredFeatures, lock), ...inferred.features]);
   const explicitSettings = extractExplicitSettings(raw);
   const settings = explicitSettings.length ? explicitSettings : options.buildType === 'app-web-app' ? inferSettings(raw, options.creationFormat) : [];
   return {
@@ -354,7 +357,7 @@ export function assemble(prompt: PromptWithSettings) {
   if (prompt.states.length) output = replaceSection(output, 'Interaction & State Rules', 'Visual Direction', unique(prompt.states.map(sentenceLine).filter(Boolean)).join('\n'));
   output = replaceSection(output, 'Core Features', 'Interaction & State Rules', polishCore(output, prompt));
   output = replaceSection(output, 'Build Quality & Brand Experience', 'Constraints', compactQuality(output));
-  if (prompt.settings?.length) output = insertBeforeSection(output, 'Completion Standard', 'Settings', unique(prompt.settings.map(sentenceLine).filter(Boolean)).join('\n'));
+  if (prompt.settings?.length) output = insertBeforeSection(output, 'Visual Direction', 'Settings', unique(prompt.settings.map(sentenceLine).filter(Boolean)).join('\n'));
   output = replaceTailSection(output, 'Completion Standard', completionFor(prompt));
   return output;
 }
