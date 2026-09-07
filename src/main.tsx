@@ -47,22 +47,22 @@ function App(){
  const[saved,setSaved]=useState<string[]>(()=>readSaved());
  const[menuOpen,setMenuOpen]=useState(false);
  const[screen,setScreen]=useState<Screen>('generator');
- const[buildType,setBuildType]=useState<BuildType>('app-web-app');
- const[creationFormat,setCreationFormat]=useState<CreationFormat>('idea-decides');
- const[visualStyle,setVisualStyle]=useState<VisualStyle>('premium-modern');
+ const[buildType,setBuildType]=useState<BuildType|null>(null);
+ const[creationFormat,setCreationFormat]=useState<CreationFormat|null>(null);
+ const[visualStyle,setVisualStyle]=useState<VisualStyle|null>(null);
  const[buildPickerOpen,setBuildPickerOpen]=useState(false);
  const[formatPickerOpen,setFormatPickerOpen]=useState(false);
  const[visualPickerOpen,setVisualPickerOpen]=useState(false);
  const[activeCategory,setActiveCategory]=useState<StarterCategoryId>('app');
  const[expandedStarter,setExpandedStarter]=useState<string|null>(null);
  const[confirmClear,setConfirmClear]=useState(false);
- const profile=useMemo(()=>buildTypeOptions.find(x=>x.buildType===buildType)!,[buildType]);
- const formatProfile=useMemo(()=>creationFormatOptions.find(x=>x.creationFormat===creationFormat)!,[creationFormat]);
- const visualProfile=useMemo(()=>visualStyleOptions.find(x=>x.visualStyle===visualStyle)!,[visualStyle]);
+ const profile=useMemo(()=>buildType?buildTypeOptions.find(x=>x.buildType===buildType):null,[buildType]);
+ const formatProfile=useMemo(()=>creationFormat?creationFormatOptions.find(x=>x.creationFormat===creationFormat):null,[creationFormat]);
+ const visualProfile=useMemo(()=>visualStyle?visualStyleOptions.find(x=>x.visualStyle===visualStyle):null,[visualStyle]);
  const category=getStarterCategory(activeCategory);
 
  function navigate(next:Screen){setScreen(next);setMenuOpen(false);setBuildPickerOpen(false);setFormatPickerOpen(false);setVisualPickerOpen(false);setConfirmClear(false)}
- function go(){try{const next=generate(idea,{buildType,creationFormat,visualStyle});setPrompt(next);setError('')}catch(e){setError(e instanceof Error?e.message:'Please add more detail.')}}
+ function go(){if(!buildType||!creationFormat||!visualStyle){setError('Choose what to build, the format, and the visual style first.');return}try{const next=generate(idea,{buildType,creationFormat,visualStyle});setPrompt(next);setError('')}catch(e){setError(e instanceof Error?e.message:'Please add more detail.')}}
  async function paste(){try{const text=await navigator.clipboard.readText();setIdea(text);setError('')}catch{setError('Clipboard access was blocked. Tap and hold in the idea box to paste.')}}
  function clearIdea(){setIdea('');setError('')}
  function clearPrompt(){setPrompt('')}
@@ -88,17 +88,17 @@ function App(){
 
  return <main className="app-shell">{header}
   <section className="build-picker selector-stack-item">
-   <button className="build-picker-trigger" onClick={()=>{setBuildPickerOpen(v=>!v);setFormatPickerOpen(false);setVisualPickerOpen(false)}} aria-expanded={buildPickerOpen}><span><small>What would you like to build?</small><strong>{profile.label}</strong></span><span className={buildPickerOpen?'picker-arrow open':'picker-arrow'}>⌄</span></button>
+   <button className="build-picker-trigger" onClick={()=>{setBuildPickerOpen(v=>!v);setFormatPickerOpen(false);setVisualPickerOpen(false)}} aria-expanded={buildPickerOpen}><span><strong>{profile?.label||'What would you like to build?'}</strong></span><span className={buildPickerOpen?'picker-arrow open':'picker-arrow'}>⌄</span></button>
    {buildPickerOpen&&<div className="build-options">{buildTypeOptions.map(option=><button key={option.buildType} className={buildType===option.buildType?'selected':''} onClick={()=>{setBuildType(option.buildType);setBuildPickerOpen(false)}}><span><strong>{option.label}</strong><small>{option.emphasis.slice(0,3).join(' · ')}</small></span>{buildType===option.buildType&&<span className="check">✓</span>}</button>)}</div>}
   </section>
 
   <section className="build-picker format-picker selector-stack-item">
-   <button className="build-picker-trigger format-trigger" onClick={()=>{setFormatPickerOpen(v=>!v);setBuildPickerOpen(false);setVisualPickerOpen(false)}} aria-expanded={formatPickerOpen}><span><small>What format should it use?</small><strong>{formatProfile.label}</strong></span><span className={formatPickerOpen?'picker-arrow open':'picker-arrow'}>⌄</span></button>
+   <button className="build-picker-trigger format-trigger" onClick={()=>{setFormatPickerOpen(v=>!v);setBuildPickerOpen(false);setVisualPickerOpen(false)}} aria-expanded={formatPickerOpen}><span><strong>{formatProfile?.label||'What format do you want?'}</strong></span><span className={formatPickerOpen?'picker-arrow open':'picker-arrow'}>⌄</span></button>
    {formatPickerOpen&&<div className="build-options format-options">{creationFormatOptions.map(option=><button key={option.creationFormat} className={creationFormat===option.creationFormat?'selected':''} onClick={()=>{setCreationFormat(option.creationFormat);setFormatPickerOpen(false)}}><span><strong>{option.label}</strong><small>{option.guidance[0]||'Use the format explicitly stated in the idea.'}</small></span>{creationFormat===option.creationFormat&&<span className="check">✓</span>}</button>)}</div>}
   </section>
 
   <section className="build-picker visual-picker selector-stack-item">
-   <button className="build-picker-trigger visual-trigger" onClick={()=>{setVisualPickerOpen(v=>!v);setBuildPickerOpen(false);setFormatPickerOpen(false)}} aria-expanded={visualPickerOpen}><span><small>How should it look?</small><strong>{visualProfile.label}</strong></span><span className={visualPickerOpen?'picker-arrow open':'picker-arrow'}>⌄</span></button>
+   <button className="build-picker-trigger visual-trigger" onClick={()=>{setVisualPickerOpen(v=>!v);setBuildPickerOpen(false);setFormatPickerOpen(false)}} aria-expanded={visualPickerOpen}><span><strong>{visualProfile?.label||'How should it look?'}</strong></span><span className={visualPickerOpen?'picker-arrow open':'picker-arrow'}>⌄</span></button>
    {visualPickerOpen&&<div className="build-options visual-options">{visualStyleOptions.map(option=><button key={option.visualStyle} className={visualStyle===option.visualStyle?'selected':''} onClick={()=>{setVisualStyle(option.visualStyle);setVisualPickerOpen(false)}}><span><strong>{option.label}</strong><small>{option.emphasis.slice(0,3).join(' · ')}</small></span>{visualStyle===option.visualStyle&&<span className="check">✓</span>}</button>)}</div>}
   </section>
 
@@ -107,7 +107,7 @@ function App(){
 
   <section className="category-section"><div className="category-label"><strong>Need a starting point? <span>Choose a category</span></strong><button onClick={()=>navigate('category-index')}>See all <span>→</span></button></div><div className="category-row">{starterCategories.map(item=><button key={item.id} className="category" onClick={()=>openCategory(item.id)}><Icon name={categoryIcons[item.id]}/>{item.label}</button>)}</div></section>
 
-  <button className="generate" onClick={go} disabled={!idea.trim()}><span className="generate-label"><Icon name="sparkle"/>Generate Prompt</span><span className="generate-arrow"><Icon name="chevron"/></span></button>
+  <button className="generate" onClick={go} disabled={!idea.trim()||!buildType||!creationFormat||!visualStyle}><span className="generate-label"><Icon name="sparkle"/>Generate Prompt</span><span className="generate-arrow"><Icon name="chevron"/></span></button>
   <section className={prompt?'output-panel has-output':'output-panel'} aria-live="polite">{prompt?<pre>{prompt}</pre>:<div className="empty-state"><div className="bulb"><Icon name="bulb"/></div><h2>Your generated prompt<br/>will appear here after you generate.</h2><p>Choose what to build, its format, and how it should look,<br/>then Perfect Prompt routes the right specialists.</p></div>}</section>
   <div className="output-actions"><button className="copy-action" onClick={copyPrompt} disabled={!prompt}><Icon name="copy"/>Copy Prompt</button><button className="save-action" onClick={savePrompt} disabled={!prompt}><Icon name="save"/>Save</button><button className="clear-action" onClick={clearPrompt} disabled={!prompt}><Icon name="trash"/>Clear</button></div>
  </main>
