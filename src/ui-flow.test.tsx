@@ -24,22 +24,36 @@ describe('Perfect Prompt primary UI flow', () => {
     });
   });
 
-  it('preserves build, format, and visual selectors through starter routing, generation, save, and reopen', async () => {
-    expect(document.body.textContent).toContain('What would you like to build?');
-    expect(document.body.textContent).toContain('What format should it use?');
-    expect(document.body.textContent).toContain('How should it look?');
+  it('uses each selector question as its label until a choice replaces it', async () => {
+    expect(document.querySelector('.build-picker-trigger strong')?.textContent).toBe('What would you like to build?');
+    expect(document.querySelector('.format-trigger strong')?.textContent).toBe('What format do you want?');
+    expect(document.querySelector('.visual-trigger strong')?.textContent).toBe('How should it look?');
 
     await click(document.querySelector('.build-picker-trigger'));
     await click(buttonWithText('Website'));
     expect(document.querySelector('.build-picker-trigger strong')?.textContent).toBe('Website');
+    expect(document.querySelector('.build-picker-trigger')?.textContent).not.toContain('What would you like to build?');
 
     await click(document.querySelector('.format-trigger'));
-    await click(buttonWithText('Responsive Web App'));
-    expect(document.querySelector('.format-trigger strong')?.textContent).toBe('Responsive Web App');
+    await click(buttonWithText('Android App'));
+    expect(document.querySelector('.format-trigger strong')?.textContent).toBe('Android App');
+    expect(document.querySelector('.format-trigger')?.textContent).not.toContain('What format do you want?');
 
     await click(document.querySelector('.visual-trigger'));
     await click(buttonWithText('Apple-Level Minimal'));
     expect(document.querySelector('.visual-trigger strong')?.textContent).toBe('Apple-Level Minimal');
+    expect(document.querySelector('.visual-trigger')?.textContent).not.toContain('How should it look?');
+  });
+
+  it('preserves build, format, and visual selectors through starter routing, generation, save, and reopen', async () => {
+    await click(document.querySelector('.build-picker-trigger'));
+    await click(buttonWithText('Website'));
+
+    await click(document.querySelector('.format-trigger'));
+    await click(buttonWithText('Responsive Web App'));
+
+    await click(document.querySelector('.visual-trigger'));
+    await click(buttonWithText('Apple-Level Minimal'));
 
     await click(buttonWithText('Utility'));
     expect(document.querySelector('.page-heading h2')?.textContent).toBe('Utility');
