@@ -251,6 +251,35 @@ const compactQuality = (output: string) => {
   const guard = lines.find(line => /generic template|placeholder styling|stock component/i.test(line));
   return unique([...lines.slice(0, 3), ...(guard ? [guard] : [lines[3]])]).slice(0, 4).join('\n');
 };
+const stateOwnedCoreLine = (line: string, states: readonly string[]) => {
+  if (!/(actual amount|confirmation when necessary|re-enter|scheduled income|scheduled bill)/i.test(line)) return false;
+  return states.some(state => /(actual amount|confirmation when necessary|re-enter|scheduled income|scheduled bill)/i.test(state));
+};
+const polishCoreLine = (line: string) => {
+  let value = line.trim();
+  value = value.replace(/^Record\s+Add\s+/i, 'Add ');
+  value = value.replace(/^Help\s+the\s+user\s+set\s+up\s+their\s+/i, "Set up the user's ");
+  value = value.replace(/^Help\s+the\s+user\s+set\s+up\s+/i, 'Set up ');
+  value = value.replace(/^Recurring monthly bills once\.?$/i, 'Set up recurring monthly bills once and reuse their saved schedules.');
+  value = value.replace(/^Then make (.+?) mostly automatic with (.+?)\.?$/i, 'Manage $1 automatically with $2.');
+  value = value.replace(/^Then make (.+?) automatic with (.+?)\.?$/i, 'Manage $1 automatically with $2.');
+  return value;
+};
+const polishCore = (output: string, prompt: Prompt) => unique(
+  sectionBody(output, 'Core Features', 'Interaction & State Rules')
+    .split(/\r?\n/)
+    .map(line => line.trim())
+    .filter(Boolean)
+    .filter(line => !stateOwnedCoreLine(line, prompt.states))
+    .map(polishCoreLine)
+    .filter(Boolean)
+).join('\n');
+const validationCoreFeatures = (prompt: Prompt) => prompt.features
+  .filter(feature => !stateOwnedCoreLine(feature, prompt.states))
+  .map(feature => {
+    const polished = clean(polishCoreLine(sentenceLine(feature)));
+    return polished.toLowerCase() === clean(feature).toLowerCase() ? feature : polished;
+  });
 const completionFor = (prompt: Prompt) => {
   if (prompt.buildType !== 'app-web-app') return prompt.completion;
   return prompt.lock.workflow
@@ -267,6 +296,7 @@ export function assemble(prompt: Prompt) {
     output = replaceSection(output, 'Core Features', 'Interaction & State Rules', [core, optional].filter(Boolean).join('\n'));
   }
   if (prompt.states.length) output = replaceSection(output, 'Interaction & State Rules', 'Visual Direction', unique(prompt.states.map(sentenceLine).filter(Boolean)).join('\n'));
+  output = replaceSection(output, 'Core Features', 'Interaction & State Rules', polishCore(output, prompt));
   output = replaceSection(output, 'Build Quality & Brand Experience', 'Constraints', compactQuality(output));
   output = replaceTailSection(output, 'Completion Standard', completionFor(prompt));
   return output;
@@ -304,7 +334,7 @@ const validationPrompt = (prompt: Prompt): Prompt => ({
     workflow: '',
     lockedInstructions: [],
     optionalFeatures: [],
-    requiredFeatures: [...prompt.features],
+    requiredFeatures: validationCoreFeatures(prompt),
     screens: [...prompt.screens],
   },
 });
