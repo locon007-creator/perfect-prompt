@@ -12,7 +12,7 @@ const profiles: Record<VisualStyle, VisualStyleProfile> = {
   'premium-modern': {
     visualStyle: 'premium-modern',
     label: 'Premium Modern',
-    role: 'You are a Senior Product UI/UX Designer and Design Systems Specialist.',
+    role: 'Also act as a Senior Product UI/UX Designer and Design Systems Specialist.',
     emphasis: ['premium hierarchy','refined typography','balanced spacing','modern surfaces','subtle motion','production polish'],
     quality: [
       'Create a distinct visual identity appropriate to the product, including a simple branded mark or wordmark when it improves recognition.',
@@ -25,7 +25,7 @@ const profiles: Record<VisualStyle, VisualStyleProfile> = {
   'apple-minimal': {
     visualStyle: 'apple-minimal',
     label: 'Apple-Level Minimal',
-    role: 'You are a Senior Mobile UI/UX Designer and Interaction Design Specialist.',
+    role: 'Also act as a Senior Mobile UI/UX Designer and Interaction Design Specialist.',
     emphasis: ['restraint','clarity','precise spacing','native-feeling interactions','calm surfaces','high legibility'],
     quality: [
       'Create a quiet, recognizable visual identity with a restrained app mark or wordmark when appropriate; branding must never compete with the task.',
@@ -38,7 +38,7 @@ const profiles: Record<VisualStyle, VisualStyleProfile> = {
   'figma-product': {
     visualStyle: 'figma-product',
     label: 'Figma-Level Product Design',
-    role: 'You are a Product Design Lead and Design Systems Specialist.',
+    role: 'Also act as a Product Design Lead and Design Systems Specialist.',
     emphasis: ['systematic hierarchy','component consistency','layout rhythm','responsive product UI','design tokens','handoff-ready polish'],
     quality: [
       'Create a coherent visual identity and product-specific brand language that can be expressed through a simple mark, wordmark, icon system, and reusable design tokens.',
@@ -51,7 +51,7 @@ const profiles: Record<VisualStyle, VisualStyleProfile> = {
   'bold-cinematic': {
     visualStyle: 'bold-cinematic',
     label: 'Bold / Cinematic',
-    role: 'You are a Creative UI Director and Motion / Visual Experience Designer.',
+    role: 'Also act as a Creative UI Director and Motion / Visual Experience Designer.',
     emphasis: ['dramatic hierarchy','depth','controlled contrast','cinematic composition','purposeful motion','strong visual moments'],
     quality: [
       'Create a memorable visual identity with a strong branded mark or wordmark when appropriate to the product.',
@@ -64,7 +64,7 @@ const profiles: Record<VisualStyle, VisualStyleProfile> = {
   'clean-utility': {
     visualStyle: 'clean-utility',
     label: 'Clean Utility',
-    role: 'You are a Utility UX Designer and Information Hierarchy Specialist.',
+    role: 'Also act as a Utility UX Designer and Information Hierarchy Specialist.',
     emphasis: ['speed','clarity','dense-but-readable information','thumb-friendly controls','low friction','minimal decoration'],
     quality: [
       'Create a simple visual identity that makes the utility recognizable without adding decorative branding that slows use.',
@@ -77,7 +77,7 @@ const profiles: Record<VisualStyle, VisualStyleProfile> = {
   custom: {
     visualStyle: 'custom',
     label: 'Custom / Let the idea decide',
-    role: 'You are a design specialist who follows only the explicit visual direction in the user idea.',
+    role: 'Also act as a design specialist who follows only the explicit visual direction in the user idea.',
     emphasis: ['explicit user visual requirements only','no invented visual style','preserve stated design constraints'],
     quality: []
   }
