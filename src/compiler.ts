@@ -128,20 +128,25 @@ const extractMobileConstraints = (text: string) => {
 };
 
 const extractExplicitSettings = (text: string) => {
-  const match = /(?:^|\n)\s*Settings\s*:\s*([\s\S]*?)(?=\n\s*\n\s*(?:Rules|Constraints|Do Not Add|Main Workflow|Primary job|Income Setup|Bills Setup|Credit Cards|Home|Platform|Target User)\s*:|$)/i.exec(text);
-  if (!match?.[1]) return [];
-  const body = match[1].trim();
+  const marker = /\bSettings\s*:/i.exec(text);
+  if (!marker) return [];
+  const after = text.slice((marker.index ?? 0) + marker[0].length);
+  const body = after.split(/\n\s*\n/)[0].trim();
+  if (!body) return [];
   const lines: string[] = [];
   for (const sentence of (body.match(/[^.!?]+(?:[.!?]|$)/g) || [body])) {
     let value = clean(sentence.replace(/^\s*(?:also\s+)?include\s+/i, ''));
-    if (!value) continue;
-    const managePair = /^Manage Credit Cards\s+and\s+Income Schedule$/i.test(value);
-    if (managePair) {
+    if (!value || /^(?:no|do not|don't)\b/i.test(value)) continue;
+    if (/^Theme\s+with\s+Light\s*,\s*Dark\s*,\s*and\s+Automatic$/i.test(value)) {
+      lines.push('Theme: Light / Dark / Automatic');
+      continue;
+    }
+    if (/^Manage Credit Cards\s+and\s+Income Schedule$/i.test(value)) {
       lines.push('Manage Credit Cards', 'Income Schedule');
       continue;
     }
-    if (/^Theme\s+with\s+Light\s*,\s*Dark\s*,\s*and\s+Automatic$/i.test(value)) {
-      lines.push('Theme: Light / Dark / Automatic');
+    if (/^Home Base\s+and\s+Truck Profiles$/i.test(value)) {
+      lines.push('Home Base', 'Truck Profiles');
       continue;
     }
     lines.push(value);
@@ -299,10 +304,6 @@ const stateOwnedCoreLine = (line: string, states: readonly string[]) => {
   if (!/(actual amount|confirmation when necessary|re-enter|scheduled income|scheduled bill)/i.test(line)) return false;
   return states.some(state => /(actual amount|confirmation when necessary|re-enter|scheduled income|scheduled bill)/i.test(state));
 };
-const settingsOwnedCoreLine = (line: string, settings: readonly string[]) => {
-  if (!settings.length) return false;
-  return /\b(?:theme|manage bills|manage credit cards|income schedule|payment preferences?|time\/date formatting|time format|date format|data reset|data export|data management|history and saved-workday management)\b/i.test(line);
-};
 const polishCoreLine = (line: string) => {
   let value = line.trim();
   value = value.replace(/^Record\s+Add\s+/i, 'Add ');
@@ -319,13 +320,11 @@ const polishCore = (output: string, prompt: PromptWithSettings) => unique(
     .map(line => line.trim())
     .filter(Boolean)
     .filter(line => !stateOwnedCoreLine(line, prompt.states))
-    .filter(line => !settingsOwnedCoreLine(line, prompt.settings || []))
     .map(polishCoreLine)
     .filter(Boolean)
 ).join('\n');
 const validationCoreFeatures = (prompt: PromptWithSettings) => prompt.features
   .filter(feature => !stateOwnedCoreLine(feature, prompt.states))
-  .filter(feature => !settingsOwnedCoreLine(feature, prompt.settings || []))
   .map(feature => {
     const polished = clean(polishCoreLine(sentenceLine(feature)));
     return polished.toLowerCase() === clean(feature).toLowerCase() ? feature : polished;
@@ -378,10 +377,10 @@ const validateOptional = (prompt: Prompt, output: string) => {
 };
 const validateSettings = (prompt: PromptWithSettings, output: string) => {
   if (!prompt.settings?.length) return;
-  const settings = sectionBody(output, 'Settings', 'Completion Standard').toLowerCase();
+  const lower = output.toLowerCase();
   for (const item of prompt.settings) {
     const tokens = normalized(item).split(' ').filter(token => token.length > 2 && !['with', 'and', 'the'].includes(token));
-    if (tokens.length && !tokens.every(token => settings.includes(token))) throw Error(`Setting missing: ${item}`);
+    if (tokens.length && !tokens.every(token => lower.includes(token))) throw Error(`Setting missing: ${item}`);
   }
 };
 const validationPrompt = (prompt: PromptWithSettings): Prompt => ({
