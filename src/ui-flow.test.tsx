@@ -3,7 +3,7 @@ import { act } from 'react';
 import { beforeAll, describe, expect, it } from 'vitest';
 
 const buttonWithText = (text: string) => [...document.querySelectorAll('button')].find(button => button.textContent?.includes(text));
-const click = async (button: Element | undefined) => {
+const click = async (button: Element | null | undefined) => {
   expect(button).toBeTruthy();
   await act(async () => {
     button!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
