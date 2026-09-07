@@ -3,17 +3,19 @@ import type { BuildType } from './intent';
 import { getSpecialistProfile } from './intent';
 import type { VisualStyle } from './visual-style';
 import { getVisualStyleProfile } from './visual-style';
+import type { CreationFormat } from './creation-format';
+import { getCreationFormatProfile } from './creation-format';
 
 export const InputSchema = z.object({ idea: z.string().trim().min(10) });
 export type Input = z.infer<typeof InputSchema>;
-export type GenerateOptions = Readonly<{ buildType?: BuildType; visualStyle?: VisualStyle }>;
+export type GenerateOptions = Readonly<{ buildType?: BuildType; creationFormat?: CreationFormat; visualStyle?: VisualStyle }>;
 export type IdeaLock = Readonly<{
   appName: string; primaryJob: string; targetUser: string; platform: string; workflow: string;
   screens: readonly string[]; requiredFeatures: readonly string[]; optionalFeatures: readonly string[];
   stateRules: readonly string[]; persistenceRules: readonly string[]; visualRequirements: readonly string[];
   constraints: readonly string[]; explicitExclusions: readonly string[]; lockedInstructions: readonly string[];
 }>;
-export type Prompt = { buildType?:BuildType; role:string; mission:string; lock:IdeaLock; targetUser:string; platform:string; workflow:string; screens:string[]; features:string[]; states:string[]; visual:string; quality:string[]; constraints:string[]; doNotAdd:string[]; completion:string };
+export type Prompt = { buildType?:BuildType; creationFormat?:CreationFormat; formatLabel:string; formatGuidance:string[]; role:string; mission:string; lock:IdeaLock; targetUser:string; platform:string; workflow:string; screens:string[]; features:string[]; states:string[]; visual:string; quality:string[]; constraints:string[]; doNotAdd:string[]; completion:string };
 
 const freeze = <T>(value:T):Readonly<T> => { if(value && typeof value==='object' && !Object.isFrozen(value)){Object.freeze(value); for(const v of Object.values(value as object)) freeze(v);} return value as Readonly<T>; };
 const clean=(s:string)=>s.replace(/[.!?]+$/,'').trim();
@@ -98,13 +100,17 @@ const explicitGamePlatform=(lock:IdeaLock)=>{
  if(/\bdesktop\b/i.test(raw))return'Desktop';
  return'Game platform not specified';
 };
-const effectivePlatform=(lock:IdeaLock,buildType?:BuildType)=>{
+const baseEffectivePlatform=(lock:IdeaLock,buildType?:BuildType)=>{
  if(!buildType||buildType==='app-web-app')return lock.platform;
  if(buildType==='website')return 'Web';
  if(buildType==='game')return explicitGamePlatform(lock);
  if(buildType==='video')return 'Video production';
  if(buildType==='image')return 'Image generation';
  return 'General prompt';
+};
+const effectivePlatform=(lock:IdeaLock,buildType?:BuildType,creationFormat?:CreationFormat)=>{
+ if(creationFormat&&creationFormat!=='idea-decides')return getCreationFormatProfile(creationFormat).medium||baseEffectivePlatform(lock,buildType);
+ return baseEffectivePlatform(lock,buildType);
 };
 const missionFor=(lock:IdeaLock,buildType?:BuildType)=>{
  switch(buildType){
@@ -202,9 +208,12 @@ const visualLines=(visual:string)=>compactLines(visual.split(';').map(x=>x.trim(
 const audienceLines=(target:string)=>target.toLowerCase()==='the intended user'
  ? ['Primary audience: the intended user.','Do not invent a more specific persona unless the locked idea provides one.']
  : [`Primary audience: ${target}.`,'Keep product decisions grounded in this stated audience; do not broaden it to unrelated user groups.'];
-const platformLines=(platform:string)=>platform==='Not explicitly specified'
- ? ['Not explicitly specified','Do not assume Android, iOS, or web unless the locked idea specifies it.']
- : [platform];
+const platformLines=(platform:string,formatLabel:string,formatGuidance:string[])=>{
+ const base=platform==='Not explicitly specified'
+  ? ['Not explicitly specified','Do not assume Android, iOS, or web unless the locked idea specifies it.']
+  : [platform];
+ return formatLabel==='Let the idea decide'?base:[...base,`Creation format: ${formatLabel}.`,...formatGuidance];
+};
 
 export function parseIdea(raw:string):IdeaLock {
  const text=InputSchema.parse({idea:raw}).idea;
@@ -250,6 +259,7 @@ export function compile(raw:string, options:GenerateOptions={}):Prompt {
  const lock=parseIdea(raw);
  const technicalRole=options.buildType?getSpecialistProfile(options.buildType).role:'You are a senior product designer and frontend engineer.';
  const designProfile=options.visualStyle?getVisualStyleProfile(options.visualStyle):null;
+ const formatProfile=options.creationFormat?getCreationFormatProfile(options.creationFormat):getCreationFormatProfile('idea-decides');
  const role=designProfile?`${technicalRole} ${designProfile.role}`:technicalRole;
  const visual=lock.visualRequirements.length
   ? lock.visualRequirements.join('; ')
@@ -257,7 +267,7 @@ export function compile(raw:string, options:GenerateOptions={}):Prompt {
    ? designProfile.emphasis.join('; ')
    : '';
  const quality=designProfile&&designProfile.visualStyle!=='custom'?[...designProfile.quality]:[];
- return {buildType:options.buildType,role,mission:missionFor(lock,options.buildType),lock,targetUser:lock.targetUser,platform:effectivePlatform(lock,options.buildType),workflow:lock.workflow,screens:[...lock.screens],features:[...lock.requiredFeatures],states:[...lock.stateRules,...lock.persistenceRules],visual,quality,constraints:[...lock.constraints],doNotAdd:[...lock.explicitExclusions],completion:completionFor(options.buildType)};
+ return {buildType:options.buildType,creationFormat:options.creationFormat,formatLabel:formatProfile.label,formatGuidance:[...formatProfile.guidance],role,mission:missionFor(lock,options.buildType),lock,targetUser:lock.targetUser,platform:effectivePlatform(lock,options.buildType,options.creationFormat),workflow:lock.workflow,screens:[...lock.screens],features:[...lock.requiredFeatures],states:[...lock.stateRules,...lock.persistenceRules],visual,quality,constraints:[...lock.constraints],doNotAdd:[...lock.explicitExclusions],completion:completionFor(options.buildType)};
 }
 export function assemble(p:Prompt){
  const core=p.features.length?unique(p.features.map(x=>featureLine(x,p.features))).join('\n'):'Only features explicitly stated or directly required by the locked idea.';
@@ -267,7 +277,7 @@ export function assemble(p:Prompt){
  const doNotAdd=p.doNotAdd.length?compactLines(p.doNotAdd).join('\n'):doNotAddFallback(p.buildType);
  const structure=p.screens.length?p.screens.map((s,i)=>`${i+1}. ${s}`).join('\n'):structureFallback(p.buildType);
  const visual=p.visual?visualLines(p.visual).join('\n'):'Follow only visual requirements stated in the idea.';
- return ['Role',p.role,'Product Mission',p.mission,'Idea Lock',`Project type: ${buildLabel(p.buildType)}\nProject name: ${p.lock.appName}\nPrimary job: ${p.lock.primaryJob}\nTarget user: ${p.lock.targetUser}\nPlatform / medium: ${p.platform}\nLocked instruction: ${p.lock.lockedInstructions.join(' ')}`,'Target User',audienceLines(p.targetUser).join('\n'),'Platform',platformLines(p.platform).join('\n'),'Main Workflow',p.workflow||workflowFallback(p.buildType),'Structure Requirements',structure,'Core Features',core,'Interaction & State Rules',states,'Visual Direction',visual,'Build Quality & Brand Experience',quality,'Constraints',constraints,'Do Not Add',doNotAdd,'Completion Standard',p.completion].join('\n\n');
+ return ['Role',p.role,'Product Mission',p.mission,'Idea Lock',`Project type: ${buildLabel(p.buildType)}\nCreation format: ${p.formatLabel}\nProject name: ${p.lock.appName}\nPrimary job: ${p.lock.primaryJob}\nTarget user: ${p.lock.targetUser}\nPlatform / medium: ${p.platform}\nLocked instruction: ${p.lock.lockedInstructions.join(' ')}`,'Target User',audienceLines(p.targetUser).join('\n'),'Platform',platformLines(p.platform,p.formatLabel,p.formatGuidance).join('\n'),'Main Workflow',p.workflow||workflowFallback(p.buildType),'Structure Requirements',structure,'Core Features',core,'Interaction & State Rules',states,'Visual Direction',visual,'Build Quality & Brand Experience',quality,'Constraints',constraints,'Do Not Add',doNotAdd,'Completion Standard',p.completion].join('\n\n');
 }
 export function validateContradictions(p:Prompt,output:string){const lock=p.lock, lower=output.toLowerCase(); const workflow=output.split('Main Workflow')[1]?.split('Structure Requirements')[0]||''; const structures=output.split('Structure Requirements')[1]?.split('Core Features')[0]||''; const core=output.split('Core Features')[1]?.split('Interaction & State Rules')[0]||''; const optional=lock.optionalFeatures.join(' ').toLowerCase();
  if(lock.workflow && !workflow.toLowerCase().includes(lock.workflow.toLowerCase())) throw Error('Workflow altered or missing');

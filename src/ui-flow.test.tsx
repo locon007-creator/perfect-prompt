@@ -24,13 +24,18 @@ describe('Perfect Prompt primary UI flow', () => {
     });
   });
 
-  it('preserves selectors through starter routing, generates, saves, and reopens the prompt', async () => {
+  it('preserves build, format, and visual selectors through starter routing, generation, save, and reopen', async () => {
     expect(document.body.textContent).toContain('What would you like to build?');
+    expect(document.body.textContent).toContain('What format should it use?');
     expect(document.body.textContent).toContain('How should it look?');
 
     await click(document.querySelector('.build-picker-trigger'));
     await click(buttonWithText('Website'));
     expect(document.querySelector('.build-picker-trigger strong')?.textContent).toBe('Website');
+
+    await click(document.querySelector('.format-trigger'));
+    await click(buttonWithText('Responsive Web App'));
+    expect(document.querySelector('.format-trigger strong')?.textContent).toBe('Responsive Web App');
 
     await click(document.querySelector('.visual-trigger'));
     await click(buttonWithText('Apple-Level Minimal'));
@@ -46,6 +51,7 @@ describe('Perfect Prompt primary UI flow', () => {
     const textarea = document.querySelector('textarea') as HTMLTextAreaElement;
     expect(textarea.value).toContain('grocery list utility');
     expect(document.querySelector('.build-picker-trigger strong')?.textContent).toBe('Website');
+    expect(document.querySelector('.format-trigger strong')?.textContent).toBe('Responsive Web App');
     expect(document.querySelector('.visual-trigger strong')?.textContent).toBe('Apple-Level Minimal');
 
     await click(buttonWithText('Generate Prompt'));
@@ -53,6 +59,7 @@ describe('Perfect Prompt primary UI flow', () => {
     expect(output).toContain('Web Experience Engineer');
     expect(output).toContain('Interaction Design Specialist');
     expect(output).toContain('Project type: Website');
+    expect(output).toContain('Creation format: Responsive Web App');
     expect(output).toContain('Structure Requirements');
 
     await click(buttonWithText('Save'));
@@ -60,6 +67,6 @@ describe('Perfect Prompt primary UI flow', () => {
 
     await click(document.querySelector('[aria-label="Open menu"]'));
     await click(buttonWithText('Saved Prompts'));
-    expect(document.querySelector('.saved-card pre')?.textContent).toContain('Project type: Website');
+    expect(document.querySelector('.saved-card pre')?.textContent).toContain('Creation format: Responsive Web App');
   });
 });
