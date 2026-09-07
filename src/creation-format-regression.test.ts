@@ -30,7 +30,9 @@ describe('creation format routing', () => {
     expect(after).toEqual(before);
     expect(output).toContain(`Creation format: ${label}`);
     expect(output).toContain(`Platform / medium: ${medium}`);
-    expect(output).toContain('Locked instruction: Build a personal timesheet utility');
+    expect(output).toContain('Project name: personal timesheet utility');
+    expect(output).toContain('Primary job: recording work start and end times, daily hours, and a simple weekly total');
+    expect(output).not.toContain('Locked instruction:');
   });
 
   test('android format adds Android-specific execution guidance without inventing product features', () => {

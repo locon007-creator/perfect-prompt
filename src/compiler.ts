@@ -1,5 +1,5 @@
 import * as legacy from './compiler-legacy';
-import type { BuildType } from './intent';
+import { getSpecialistProfile, type BuildType } from './intent';
 import type { CreationFormat } from './creation-format';
 import type { VisualStyle } from './visual-style';
 
@@ -126,10 +126,29 @@ const titleFromFirstLine = (text: string, fallback: string) => {
   if (!first || first.length > 64 || /^(?:build|create|make|design|role|product|primary|main)\b/i.test(first)) return fallback;
   return first;
 };
+const compactPrimaryJob = (value: string, appName: string) => {
+  let job = clean(value.split(/\b(?:Workflow|Screens?|Pages?|Views?|Required features?|Optional features?|Rules?)\s*:/i)[0] || value);
+  job = job.replace(/^(?:build|create|make|design)\s+/i, '').trim();
+  const escaped = appName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  job = job.replace(new RegExp(`^${escaped}\\s+(?:for|to)\\s+`, 'i'), '').trim();
+  return job || clean(value);
+};
 
 const sanitizeRole = (role: string) => role.replace(/([.!?]\s+)You are\s+/g, '$1Also act as ');
+const conciseRole = (role: string, buildType?: BuildType) => {
+  const sanitized = sanitizeRole(role);
+  if (buildType !== 'app-web-app') return sanitized;
+  const first = sanitized.match(/^.*?[.!?](?:\s|$)/)?.[0]?.trim() || 'You are a senior product designer and Full-Stack Application Engineer.';
+  const design = sanitized.match(/Also act as .+$/)?.[0];
+  return design ? `${first} ${design}` : first;
+};
+const appBuildConstraints = (buildType?: BuildType) => buildType === 'app-web-app' ? [
+  'Build the first version as one complete single self-contained index.html with inline CSS and JavaScript unless the locked idea explicitly requests another stack.',
+  'Multiple screens must behave as app views inside the same file with the navigation, interaction, state, persistence, sheets, dialogs, timers, forms, and workflow behavior the locked requirements need.',
+  'Keep the first version directly runnable and previewable without a build step, while preserving a structure that can be split into multiple files later if the product grows.',
+] : [];
 const missionFor = (base: Prompt, lock: IdeaLock, buildType?: BuildType) => {
-  if (buildType === 'app-web-app') return `Build ${lock.appName} for ${lock.targetUser}. Primary job: ${clean(lock.primaryJob)}.`;
+  if (buildType === 'app-web-app') return `Build ${lock.appName} for ${lock.targetUser}. Primary job: ${compactPrimaryJob(lock.primaryJob, lock.appName)}.`;
   return base.mission;
 };
 
@@ -139,9 +158,7 @@ export function parseIdea(raw: string): IdeaLock {
   const screens = cleanStructures(text, base.screens);
   const continuity = extractContinuityRules(text);
   let baseRequired = [...base.requiredFeatures];
-  if (continuity.length) {
-    baseRequired = baseRequired.filter(item => !/pickup trailer|drop trailer|continues through the route/i.test(item));
-  }
+  if (continuity.length) baseRequired = baseRequired.filter(item => !/pickup trailer|drop trailer|continues through the route/i.test(item));
   const declaredRequired = extractDeclaredFields(text, 'required');
   const declaredOptional = extractDeclaredFields(text, 'optional');
   const requiredDeclaration = declaredRequired.length ? [`Require ${declaredRequired.join(' and ')}`] : [];
@@ -176,7 +193,7 @@ export function compile(raw: string, options: GenerateOptions = {}): Prompt {
   const lock = parseIdea(raw);
   return {
     ...base,
-    role: sanitizeRole(base.role),
+    role: conciseRole(base.role, options.buildType),
     mission: missionFor(base, lock, options.buildType),
     lock,
     targetUser: lock.targetUser,
@@ -184,36 +201,85 @@ export function compile(raw: string, options: GenerateOptions = {}): Prompt {
     screens: [...lock.screens],
     features: [...lock.requiredFeatures],
     states: [...lock.stateRules, ...lock.persistenceRules],
-    constraints: [...lock.constraints],
+    constraints: unique([...lock.constraints, ...appBuildConstraints(options.buildType)]),
     doNotAdd: [...lock.explicitExclusions],
   };
 }
 
 const replaceSection = (output: string, name: string, next: string, body: string) => {
-  const start = `\n\n${name}\n\n`;
+  const start = `${name}\n\n`;
   const end = `\n\n${next}\n\n`;
-  const before = output.split(start)[0];
-  const rest = output.split(start)[1];
-  if (rest === undefined) return output;
-  const after = rest.split(end)[1];
-  if (after === undefined) return output;
-  return `${before}${start}${body}${end}${after}`;
+  const startAt = output.indexOf(start);
+  if (startAt < 0) return output;
+  const bodyAt = startAt + start.length;
+  const endAt = output.indexOf(end, bodyAt);
+  if (endAt < 0) return output;
+  return `${output.slice(0, bodyAt)}${body}${output.slice(endAt)}`;
 };
+const sectionBody = (output: string, name: string, next: string) => output.split(`${name}\n\n`)[1]?.split(`\n\n${next}\n\n`)[0] || '';
+const compactLock = (prompt: Prompt) => [
+  `Project type: ${getSpecialistProfile(prompt.buildType || 'general').label}`,
+  `Creation format: ${prompt.formatLabel}`,
+  `Project name: ${prompt.lock.appName}`,
+  `Primary job: ${compactPrimaryJob(prompt.lock.primaryJob, prompt.lock.appName)}`,
+  `Target user: ${prompt.lock.targetUser}`,
+  `Platform / medium: ${prompt.platform}`,
+].join('\n');
 
 export function assemble(prompt: Prompt) {
   let output = legacy.assemble(prompt);
-  if (prompt.states.length) {
-    output = replaceSection(output, 'Interaction & State Rules', 'Visual Direction', unique(prompt.states.map(sentenceLine).filter(Boolean)).join('\n'));
+  output = replaceSection(output, 'Idea Lock', 'Target User', compactLock(prompt));
+  if (prompt.lock.optionalFeatures.length) {
+    const core = sectionBody(output, 'Core Features', 'Interaction & State Rules').trim();
+    const optional = prompt.lock.optionalFeatures.map(item => `Optional: ${sentenceLine(item)}`).join('\n');
+    output = replaceSection(output, 'Core Features', 'Interaction & State Rules', [core, optional].filter(Boolean).join('\n'));
   }
+  if (prompt.states.length) output = replaceSection(output, 'Interaction & State Rules', 'Visual Direction', unique(prompt.states.map(sentenceLine).filter(Boolean)).join('\n'));
   return output;
 }
 
+const validateCompactLock = (prompt: Prompt, output: string) => {
+  for (const fact of compactLock(prompt).split('\n')) if (!output.toLowerCase().includes(fact.toLowerCase())) throw Error(`Locked fact missing: ${fact.split(':')[0]}`);
+};
+const validateWorkflow = (prompt: Prompt, output: string) => {
+  if (!prompt.lock.workflow) return;
+  const lower = sectionBody(output, 'Main Workflow', 'Structure Requirements').toLowerCase();
+  if (!lower.includes(prompt.lock.workflow.toLowerCase())) throw Error('Workflow altered or missing');
+  let from = 0;
+  for (const step of prompt.lock.workflow.split(/→|->|,|;|\band\b|\bthen\b/gi).map(clean).filter(Boolean)) {
+    const at = lower.indexOf(step.toLowerCase(), from);
+    if (at < 0) throw Error(`Workflow step missing or reordered: ${step}`);
+    from = at + step.length;
+  }
+};
+const validateOptional = (prompt: Prompt, output: string) => {
+  const core = sectionBody(output, 'Core Features', 'Interaction & State Rules');
+  const requiredOnly = core.split(/\r?\n/).filter(line => !/^Optional:\s*/i.test(line)).join('\n').toLowerCase();
+  for (const opt of prompt.lock.optionalFeatures) {
+    const marker = `Optional: ${sentenceLine(opt)}`;
+    if (!core.toLowerCase().includes(marker.toLowerCase())) throw Error(`Optional requirement missing: ${opt}`);
+    if (requiredOnly.includes(opt.toLowerCase())) throw Error(`Optional feature promoted: ${opt}`);
+  }
+};
+const validationPrompt = (prompt: Prompt): Prompt => ({
+  ...prompt,
+  workflow: '',
+  features: [],
+  lock: { ...prompt.lock, workflow: '', lockedInstructions: [], optionalFeatures: [] },
+});
+
 export function validateContradictions(prompt: Prompt, output: string) {
-  return legacy.validateContradictions(prompt, output);
+  validateCompactLock(prompt, output);
+  validateWorkflow(prompt, output);
+  validateOptional(prompt, output);
+  return legacy.validateContradictions(validationPrompt(prompt), output);
 }
 
 export function validate(prompt: Prompt, output: string) {
-  return legacy.validate(prompt, output);
+  validateCompactLock(prompt, output);
+  validateWorkflow(prompt, output);
+  validateOptional(prompt, output);
+  return legacy.validate(validationPrompt(prompt), output);
 }
 
 export const generate = (raw: string, options: GenerateOptions = {}) => {
