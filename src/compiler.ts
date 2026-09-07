@@ -203,8 +203,8 @@ const audienceLines=(target:string)=>target.toLowerCase()==='the intended user'
  ? ['Primary audience: the intended user.','Do not invent a more specific persona unless the locked idea provides one.']
  : [`Primary audience: ${target}.`,'Keep product decisions grounded in this stated audience; do not broaden it to unrelated user groups.'];
 const platformLines=(platform:string)=>platform==='Not explicitly specified'
- ? ['Platform / medium: Not explicitly specified.','Do not assume Android, iOS, or web unless the locked idea specifies it.']
- : [`Platform / medium: ${platform}.`];
+ ? ['Not explicitly specified','Do not assume Android, iOS, or web unless the locked idea specifies it.']
+ : [platform];
 
 export function parseIdea(raw:string):IdeaLock {
  const text=InputSchema.parse({idea:raw}).idea;
@@ -261,7 +261,7 @@ export function compile(raw:string, options:GenerateOptions={}):Prompt {
 }
 export function assemble(p:Prompt){
  const core=p.features.length?unique(p.features.map(x=>featureLine(x,p.features))).join('\n'):'Only features explicitly stated or directly required by the locked idea.';
- const states=p.states.length?compactLines(p.states).join('\n'):stateFallback(p.buildType);
+ const states=p.states.length?p.states.join('\n'):stateFallback(p.buildType);
  const quality=p.quality.length?compactLines(p.quality).join('\n'):'Follow only build-quality, branding, and motion requirements explicitly stated in the idea.';
  const constraints=p.constraints.length?compactLines(p.constraints).join('\n'):'Follow only constraints explicitly stated in the locked idea.';
  const doNotAdd=p.doNotAdd.length?compactLines(p.doNotAdd).join('\n'):doNotAddFallback(p.buildType);
