@@ -7,7 +7,7 @@ const financeIdea = `Personal Financial Administration\n\nBuild a premium person
 
 describe('global Core Features instruction quality', () => {
   test('finance Core Features are complete implementation instructions, not fragments', () => {
-    const output = generate(financeIdea, { buildType: 'app-web-app', creationFormat: 'android-app', visualStyle: 'apple-level-minimal' });
+    const output = generate(financeIdea, { buildType: 'app-web-app', creationFormat: 'android-app', visualStyle: 'apple-minimal' });
     const core = section(output, 'Core Features', 'Interaction & State Rules');
     expect(core).not.toContain('Recurring monthly bills once.');
     expect(core).not.toContain('Then make ongoing money management mostly automatic with very little typing.');
