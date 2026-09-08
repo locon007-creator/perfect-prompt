@@ -317,8 +317,14 @@ const compactQuality = (output: string) => {
   return unique([...lines.slice(0, 3), ...(guard ? [guard] : [lines[3]])]).slice(0, 4).join('\n');
 };
 const stateOwnedCoreLine = (line: string, states: readonly string[]) => {
-  if (!/(actual amount|confirmation when necessary|re-enter|scheduled income|scheduled bill)/i.test(line)) return false;
-  return states.some(state => /(actual amount|confirmation when necessary|re-enter|scheduled income|scheduled bill)/i.test(state));
+  const value = normalized(line);
+  return states.some(state => {
+    const stateValue = normalized(state);
+    if (!value || !stateValue) return false;
+    if (value === stateValue) return true;
+    if (value.length >= 30 && stateValue.length >= 30) return value.includes(stateValue) || stateValue.includes(value);
+    return false;
+  });
 };
 const orphanLine = /^(?:show|add|record|include|then asking|bill schedules?)\s*[:.]?$/i;
 const compactSemanticLines = (lines: string[]) => {
@@ -373,15 +379,6 @@ const purifyOutput = (output: string) => {
   let next = output;
   next = purifySection(next, 'Core Features', 'Interaction & State Rules');
   next = purifySection(next, 'Interaction & State Rules', next.includes('\n\nSettings\n\n') ? 'Settings' : 'Visual Direction');
-  const seen = new Set<string>();
-  next = next.split(/\r?\n/).filter(line => {
-    const trimmed = line.trim();
-    if (!trimmed) return true;
-    const key = trimmed.toLowerCase();
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  }).join('\n');
   return next.replace(/\n{3,}/g, '\n\n').trim();
 };
 
