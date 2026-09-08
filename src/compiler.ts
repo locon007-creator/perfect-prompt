@@ -316,14 +316,18 @@ const compactQuality = (output: string) => {
   const guard = lines.find(line => /generic template|placeholder styling|stock component/i.test(line));
   return unique([...lines.slice(0, 3), ...(guard ? [guard] : [lines[3]])]).slice(0, 4).join('\n');
 };
+const legacyStateOwnedSignal = /(actual amount|confirmation when necessary|re-enter|scheduled income|scheduled bill)/i;
 const stateOwnedCoreLine = (line: string, states: readonly string[]) => {
-  const value = normalized(line);
+  const source = clean(line);
+  const stateShaped = conditionalLead.test(source) || /^(?:save|store|persist|maintain)\b/i.test(source) || legacyStateOwnedSignal.test(source);
+  if (!stateShaped) return false;
+  const value = normalized(source);
   return states.some(state => {
     const stateValue = normalized(state);
     if (!value || !stateValue) return false;
     if (value === stateValue) return true;
-    if (value.length >= 30 && stateValue.length >= 30) return value.includes(stateValue) || stateValue.includes(value);
-    return false;
+    if (legacyStateOwnedSignal.test(source) && legacyStateOwnedSignal.test(state)) return true;
+    return value.length >= 30 && stateValue.length >= 30 && (value.includes(stateValue) || stateValue.includes(value));
   });
 };
 const orphanLine = /^(?:show|add|record|include|then asking|bill schedules?)\s*[:.]?$/i;
@@ -429,14 +433,18 @@ const validateSettings = (prompt: PromptWithSettings, output: string) => {
     if (tokens.length && !tokens.every(token => lower.includes(token))) throw Error(`Setting missing: ${item}`);
   }
 };
-const validatePurity = (output: string) => {
-  if (/^\s*(?:show|add|record|include|then asking|bill schedules?)\s*[:.]?\s*$/gim.test(output)) throw Error('Purity gate rejected an orphaned parser fragment');
+const validateNoSectionDuplicates = (output: string, name: string, next: string) => {
   const seen = new Set<string>();
-  for (const line of output.split(/\r?\n/).map(line => line.trim()).filter(Boolean)) {
+  for (const line of sectionBody(output, name, next).split(/\r?\n/).map(line => line.trim()).filter(Boolean)) {
     const key = line.toLowerCase();
-    if (seen.has(key)) throw Error(`Purity gate rejected duplicate output: ${line}`);
+    if (seen.has(key)) throw Error(`Purity gate rejected duplicate ${name} output: ${line}`);
     seen.add(key);
   }
+};
+const validatePurity = (output: string) => {
+  if (/^\s*(?:show|add|record|include|then asking|bill schedules?)\s*[:.]?\s*$/gim.test(output)) throw Error('Purity gate rejected an orphaned parser fragment');
+  validateNoSectionDuplicates(output, 'Core Features', 'Interaction & State Rules');
+  validateNoSectionDuplicates(output, 'Interaction & State Rules', output.includes('\n\nSettings\n\n') ? 'Settings' : 'Visual Direction');
 };
 const validationPrompt = (prompt: PromptWithSettings): Prompt => ({
   ...prompt,
