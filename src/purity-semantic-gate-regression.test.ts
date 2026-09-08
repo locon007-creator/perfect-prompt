@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { generate } from './compiler';
+import { compile, generate } from './compiler';
 
 const opts = {
   buildType: 'app-web-app' as const,
@@ -17,8 +17,11 @@ const normalizedLines = (output: string) => output
 
 describe('purity and semantic survival gate', () => {
   it('preserves a complete time + condition + action + saved-result rule', () => {
-    const output = generate(`Personal Financial Assistant\n\nBuild a personal finance app for one person.\nMain workflow: Welcome → Income Setup → Bills Setup → Setup Complete → Home.\nDuring Income Setup, ask whether income is Fixed or Variable and save the payday.\nIf income is fixed, save the normal amount.\nIf income is variable, never assume the paycheck stays the same.\nBeginning Thursday after 6 PM, if the next day is the saved payday and the amount has not been entered, Home should ask how much the user expects to receive on the next payday. Save that answer for that pay period and immediately use it in current calculations.\nDuring Bills Setup, ask for each bill's name, due date, and Fixed or Variable amount type.\nA few days before a variable bill is due, Home should ask for that cycle's actual amount. Save that amount only for the current billing cycle.\nSettings: Theme with Light, Dark, and Automatic. Income Schedule. Manage Bills. Notification preferences. Data and history management.\nDo not add investments, stock trading, payroll processing, teams, or social features.`, opts);
+    const idea = `Personal Financial Assistant\n\nBuild a personal finance app for one person.\nMain workflow: Welcome → Income Setup → Bills Setup → Setup Complete → Home.\nDuring Income Setup, ask whether income is Fixed or Variable and save the payday.\nIf income is fixed, save the normal amount.\nIf income is variable, never assume the paycheck stays the same.\nBeginning Thursday after 6 PM, if the next day is the saved payday and the amount has not been entered, Home should ask how much the user expects to receive on the next payday. Save that answer for that pay period and immediately use it in current calculations.\nDuring Bills Setup, ask for each bill's name, due date, and Fixed or Variable amount type.\nA few days before a variable bill is due, Home should ask for that cycle's actual amount. Save that amount only for the current billing cycle.\nSettings: Theme with Light, Dark, and Automatic. Income Schedule. Manage Bills. Notification preferences. Data and history management.\nDo not add investments, stock trading, payroll processing, teams, or social features.`;
+    const compiled = compile(idea, opts);
+    expect(compiled.states.join('\n')).toMatch(/Thursday[^\n]*after 6\s*PM/i);
 
+    const output = generate(idea, opts);
     const state = section(output, 'Interaction & State Rules', 'Settings');
     expect(state).toMatch(/Thursday[^\n]*after 6\s*PM/i);
     expect(state).toMatch(/next day[^\n]*payday/i);
