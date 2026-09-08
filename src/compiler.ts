@@ -67,7 +67,7 @@ const cleanStructures = (text: string, screens: readonly string[]) => {
   return unique([...screens].filter(screen => !workflowAction.test(clean(screen)) && !behaviorLikeStructure.test(screen) && !settingsOptionStructure.test(clean(screen))));
 };
 
-const requirementLead = /^(?:(?:only\s+)?(?:when\b|during\b|pressing\b|show\b|allow\b|use\b|provide\b|include\b|record\b|add\b|mark\b|edit\b|delete\b|remove\b|calculate\b|track\b|set\b|update\b)|(?:also\s+)?include\b|[A-Z][A-Za-z0-9 &/+-]{0,48}\s+should\b)/i;
+const requirementLead = /^(?:(?:only\s+)?(?:when\b|during\b|beginning\b|starting\b|pressing\b|show\b|allow\b|use\b|provide\b|include\b|record\b|add\b|mark\b|edit\b|delete\b|remove\b|calculate\b|track\b|set\b|update\b)|(?:also\s+)?include\b|[A-Z][A-Za-z0-9 &/+-]{0,48}\s+should\b)/i;
 const extractNaturalRequirements = (text: string) => unique(sentenceUnits(text)
   .filter(unit => requirementLead.test(unit))
   .filter(unit => !/^(?:no\b|do not\b|don't\b|without\b)/i.test(unit))
@@ -114,9 +114,10 @@ const extractPersistentState = (text: string) => unique(
     .map(value => `Maintain ${value}`)
 );
 
+const conditionalLead = /^(?:when\b|whenever\b|if\b|once\b|on\b|beginning\b|starting\b|(?:\w+\s+){0,3}(?:days?|weeks?|months?)\s+(?:before|after)\b)/i;
 const extractConditionalStates = (text: string) => unique(sentenceUnits(text)
-  .filter(unit => /^(?:when\b|whenever\b|if\b|once\b|on\b|(?:\w+\s+){0,3}(?:days?|weeks?|months?)\s+(?:before|after)\b)/i.test(unit))
-  .filter(unit => /\b(?:show|ask|prompt|notify|surface|open|update|save|confirm|require|allow|calculate|record|mark)\b/i.test(unit))
+  .filter(unit => conditionalLead.test(unit))
+  .filter(unit => /\b(?:show|ask|prompt|notify|surface|open|update|save|confirm|require|allow|calculate|record|mark|use)\b/i.test(unit))
   .map(stripInlineNegative)
   .filter(Boolean));
 
@@ -319,6 +320,19 @@ const stateOwnedCoreLine = (line: string, states: readonly string[]) => {
   if (!/(actual amount|confirmation when necessary|re-enter|scheduled income|scheduled bill)/i.test(line)) return false;
   return states.some(state => /(actual amount|confirmation when necessary|re-enter|scheduled income|scheduled bill)/i.test(state));
 };
+const orphanLine = /^(?:show|add|record|include|then asking|bill schedules?)\s*[:.]?$/i;
+const compactSemanticLines = (lines: string[]) => {
+  const cleaned = unique(lines.map(line => line.trim()).filter(Boolean).filter(line => !orphanLine.test(line)));
+  return cleaned.filter((line, index) => {
+    const value = normalized(line);
+    if (value.length < 18) return true;
+    return !cleaned.some((other, otherIndex) => {
+      if (otherIndex === index) return false;
+      const otherValue = normalized(other);
+      return otherValue.length > value.length + 12 && otherValue.includes(value);
+    });
+  });
+};
 const polishCoreLine = (line: string) => {
   let value = line.trim();
   value = value.replace(/^Record\s+Add\s+/i, 'Add ');
@@ -329,7 +343,7 @@ const polishCoreLine = (line: string) => {
   value = value.replace(/^Then make (.+?) automatic with (.+?)\.?$/i, 'Manage $1 automatically with $2.');
   return value;
 };
-const polishCore = (output: string, prompt: PromptWithSettings) => unique(
+const polishCore = (output: string, prompt: PromptWithSettings) => compactSemanticLines(
   sectionBody(output, 'Core Features', 'Interaction & State Rules')
     .split(/\r?\n/)
     .map(line => line.trim())
@@ -350,6 +364,26 @@ const completionFor = (prompt: Prompt) => {
     ? 'Implement every locked requirement, preserve the explicitly provided workflow, and add no unrequested screens or features.'
     : 'Implement every locked requirement exactly and add no unrequested screens, features, integrations, roles, or workflows.';
 };
+const purifySection = (output: string, name: string, next: string) => {
+  const body = sectionBody(output, name, next);
+  if (!body) return output;
+  return replaceSection(output, name, next, compactSemanticLines(body.split(/\r?\n/)).join('\n'));
+};
+const purifyOutput = (output: string) => {
+  let next = output;
+  next = purifySection(next, 'Core Features', 'Interaction & State Rules');
+  next = purifySection(next, 'Interaction & State Rules', next.includes('\n\nSettings\n\n') ? 'Settings' : 'Visual Direction');
+  const seen = new Set<string>();
+  next = next.split(/\r?\n/).filter(line => {
+    const trimmed = line.trim();
+    if (!trimmed) return true;
+    const key = trimmed.toLowerCase();
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  }).join('\n');
+  return next.replace(/\n{3,}/g, '\n\n').trim();
+};
 
 export function assemble(prompt: PromptWithSettings) {
   let output = legacy.assemble(prompt);
@@ -359,12 +393,12 @@ export function assemble(prompt: PromptWithSettings) {
     const optional = prompt.lock.optionalFeatures.map(item => `Optional: ${sentenceLine(item)}`).join('\n');
     output = replaceSection(output, 'Core Features', 'Interaction & State Rules', [core, optional].filter(Boolean).join('\n'));
   }
-  if (prompt.states.length) output = replaceSection(output, 'Interaction & State Rules', 'Visual Direction', unique(prompt.states.map(sentenceLine).filter(Boolean)).join('\n'));
+  if (prompt.states.length) output = replaceSection(output, 'Interaction & State Rules', 'Visual Direction', compactSemanticLines(prompt.states.map(sentenceLine).filter(Boolean)).join('\n'));
   output = replaceSection(output, 'Core Features', 'Interaction & State Rules', polishCore(output, prompt));
   output = replaceSection(output, 'Build Quality & Brand Experience', 'Constraints', compactQuality(output));
   if (prompt.settings?.length) output = insertBeforeSection(output, 'Visual Direction', 'Settings', unique(prompt.settings.map(sentenceLine).filter(Boolean)).join('\n'));
   output = replaceTailSection(output, 'Completion Standard', completionFor(prompt));
-  return output;
+  return purifyOutput(output);
 }
 
 const validateCompactLock = (prompt: Prompt, output: string) => {
@@ -398,6 +432,15 @@ const validateSettings = (prompt: PromptWithSettings, output: string) => {
     if (tokens.length && !tokens.every(token => lower.includes(token))) throw Error(`Setting missing: ${item}`);
   }
 };
+const validatePurity = (output: string) => {
+  if (/^\s*(?:show|add|record|include|then asking|bill schedules?)\s*[:.]?\s*$/gim.test(output)) throw Error('Purity gate rejected an orphaned parser fragment');
+  const seen = new Set<string>();
+  for (const line of output.split(/\r?\n/).map(line => line.trim()).filter(Boolean)) {
+    const key = line.toLowerCase();
+    if (seen.has(key)) throw Error(`Purity gate rejected duplicate output: ${line}`);
+    seen.add(key);
+  }
+};
 const validationPrompt = (prompt: PromptWithSettings): Prompt => ({
   ...prompt,
   workflow: '',
@@ -417,6 +460,7 @@ export function validateContradictions(prompt: PromptWithSettings, output: strin
   validateWorkflow(prompt, output);
   validateOptional(prompt, output);
   validateSettings(prompt, output);
+  validatePurity(output);
   return legacy.validateContradictions(validationPrompt(prompt), output);
 }
 
@@ -425,11 +469,13 @@ export function validate(prompt: PromptWithSettings, output: string) {
   validateWorkflow(prompt, output);
   validateOptional(prompt, output);
   validateSettings(prompt, output);
+  validatePurity(output);
   return legacy.validate(validationPrompt(prompt), output);
 }
 
 export const generate = (raw: string, options: GenerateOptions = {}) => {
-  const prompt = compile(raw, options);
+  const snapshot = `${raw}`;
+  const prompt = compile(snapshot, { ...options });
   const output = assemble(prompt);
   validate(prompt, output);
   return output;
