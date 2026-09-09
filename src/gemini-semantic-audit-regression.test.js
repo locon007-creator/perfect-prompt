@@ -1,13 +1,13 @@
 import{describe,it,expect}from'vitest';
 import{readFileSync}from'node:fs';
 
-describe('Gemini semantic audit instruction',()=>{
- it('requires comparing raw idea against compiler output and restoring lost meaning',()=>{
+describe('Gemini Minimal Engine reasoning instruction',()=>{
+ it('keeps raw idea authority and preserves hard creation-format guardrails',()=>{
   const source=readFileSync(new URL('../api/generate.js',import.meta.url),'utf8');
-  expect(source).toContain('Compare the USER IDEA against the compiler output requirement-by-requirement');
-  expect(source).toContain('Restore any requirement, workflow rule, state behavior, constraint, exclusion, or product logic');
-  expect(source).toContain('Treat malformed, truncated, vague, or incomplete compiler fragments as defects to repair');
-  expect(source).toContain('The compiler is guidance and guardrails, not a source that outranks the USER IDEA');
-  expect(source).toContain('Do not merely polish or paraphrase the compiler output');
+  expect(source).toContain('USER IDEA is the highest authority');
+  expect(source).toContain('MINIMAL ENGINE WRAPPER contains non-negotiable creation-format and execution guardrails');
+  expect(source).toContain('Preserve every stated workflow step');
+  expect(source).toContain('Never summarize away meaningful product logic');
+  expect(source).toContain('one self-contained index.html');
  });
 });

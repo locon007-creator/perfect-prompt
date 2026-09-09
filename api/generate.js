@@ -21,10 +21,10 @@ export default async function handler(req,res){
  const creationFormat=typeof body.creationFormat==='string'?body.creationFormat:'';
  const visualStyle=typeof body.visualStyle==='string'?body.visualStyle:'';
 
- if(!idea||!compiledPrompt)return send(res,400,{error:'Idea and compiled prompt are required.'});
+ if(!idea||!compiledPrompt)return send(res,400,{error:'Idea and prompt wrapper are required.'});
  if(idea.length>MAX_IDEA_LENGTH||compiledPrompt.length>MAX_COMPILED_LENGTH)return send(res,413,{error:'Prompt input is too large.'});
 
- const instruction=`You are the semantic quality-control, reasoning, repair, and final writing engine inside Perfect Prompt.\n\nThe compiler gives you structure, categorization, constraints, and guardrails. Your job is to make that output more accurate, complete, efficient, and effective before it reaches the AI builder. The compiler is guidance and guardrails, not a source that outranks the USER IDEA.\n\nSOURCE-OF-TRUTH ORDER:\n1. USER IDEA — highest authority for product intent, workflow, requirements, behavior, exclusions, and constraints.\n2. Selected build type, creation format, and visual style — authoritative routing constraints.\n3. Compiler output — useful structured guidance that must be audited for omissions, weakening, malformed fragments, duplication, or accidental additions.\n\nSEMANTIC AUDIT — DO THIS INTERNALLY BEFORE WRITING THE FINAL PROMPT:\n- Compare the USER IDEA against the compiler output requirement-by-requirement.\n- Restore any requirement, workflow rule, state behavior, constraint, exclusion, or product logic that the compiler omitted, weakened, shortened incorrectly, or made ambiguous.\n- Treat malformed, truncated, vague, or incomplete compiler fragments as defects to repair using the USER IDEA.\n- Detect when a product mission or primary job has been reduced to a repeated product name; rewrite it to express the actual user outcome stated in the USER IDEA.\n- Preserve exact workflow order when the USER IDEA specifies one.\n- Preserve conditional behavior, timing rules, persistence expectations, validation rules, and negative constraints when present.\n- Remove compiler-generated filler, redundancy, generic template language, or accidental features that are not supported by the USER IDEA.\n- Do not merely polish or paraphrase the compiler output. Reason about whether it faithfully represents the USER IDEA, repair it first, then optimize it.\n\nFINAL WRITING RULES:\n- Produce one excellent, copy-ready prompt for an AI builder.\n- Keep the user's idea as the source of truth. Never change the main purpose or intended audience.\n- Do not invent unrelated features, screens, accounts, dashboards, analytics, backends, or complexity.\n- Preserve the selected build type, format, and visual direction.\n- Improve clarity, ordering, completeness, implementation usefulness, and premium build quality.\n- Convert weak fragments into complete actionable instructions.\n- Keep meaningful requirements even when compressing repetition.\n- Prefer concrete behavior over vague adjectives.\n- Make the final prompt internally consistent and easy for an AI builder to execute correctly on the first build.\n- Return ONLY the final prompt. No analysis, audit notes, score, preamble, markdown fence, or explanation.\n\nSelected build type: ${buildType}\nSelected format: ${creationFormat}\nSelected visual style: ${visualStyle}\n\nUSER IDEA:\n${idea}\n\nDETERMINISTIC PERFECT PROMPT COMPILER OUTPUT:\n${compiledPrompt}`;
+ const instruction=`You are the primary reasoning and final writing engine inside Perfect Prompt.\n\nSOURCE OF TRUTH:\n1. USER IDEA is the highest authority for purpose, audience, workflow, features, conditions, timing, persistence, exclusions, relationships, and product behavior.\n2. The MINIMAL ENGINE WRAPPER contains non-negotiable creation-format and execution guardrails. When it contains the HTML hard lock, preserve it exactly even if a selector label suggests iOS, Android, or another native platform.\n3. Selected build type and visual style provide routing and presentation context only. They must never override the USER IDEA or the MINIMAL ENGINE WRAPPER.\n\nREASON BEFORE WRITING:\n- Understand the USER IDEA requirement-by-requirement before composing the final prompt.\n- Preserve every stated workflow step and its exact order when one is given.\n- Preserve conditions, timing rules, validation, persistence, exclusions, relationships, calculations, and state behavior.\n- Never summarize away meaningful product logic or weaken specific requirements into generic language.\n- Do not invent unrelated features, screens, accounts, dashboards, analytics, backends, or complexity.\n- Resolve contradictions in favor of the USER IDEA, except that explicit hard creation-format guardrails in the MINIMAL ENGINE WRAPPER remain mandatory.\n- Organize the result into a clear, professional, copy-ready builder prompt.\n\nHTML HARD LOCK:\nWhen the MINIMAL ENGINE WRAPPER requires HTML, the final prompt must explicitly require one self-contained index.html with inline CSS and JavaScript, no React, no framework, no build step, and no extra files. It must retain the strict phone portrait target of approximately 360–430 px and reject desktop/wide-layout drift.\n\nFINAL WRITING RULES:\n- Keep the user's real product outcome obvious.\n- Make behavior concrete and executable rather than relying on vague adjectives.\n- Preserve the selected visual direction only as styling guidance.\n- Produce a prompt that an AI builder can execute correctly on the first build.\n- Return ONLY the final prompt. No analysis, score, preamble, markdown fence, or explanation.\n\nSelected build type: ${buildType}\nSelected format label: ${creationFormat}\nSelected visual style: ${visualStyle}\n\nUSER IDEA:\n${idea}\n\nMINIMAL ENGINE WRAPPER:\n${compiledPrompt}`;
 
  const controller=new AbortController();
  const timer=setTimeout(()=>controller.abort(),25000);
@@ -34,7 +34,7 @@ export default async function handler(req,res){
    headers:{'Content-Type':'application/json','x-goog-api-key':apiKey},
    body:JSON.stringify({
     contents:[{role:'user',parts:[{text:instruction}]}],
-    generationConfig:{temperature:0.3,maxOutputTokens:8192}
+    generationConfig:{temperature:0.25,maxOutputTokens:8192}
    }),
    signal:controller.signal
   });
@@ -42,7 +42,7 @@ export default async function handler(req,res){
   if(!response.ok){
    const message=data?.error?.message;
    console.error('Gemini request failed',{status:response.status,model,message});
-   return send(res,502,{error:'Gemini could not generate a prompt. Perfect Prompt can use its local compiler instead.'});
+   return send(res,502,{error:'Gemini could not generate a prompt. Perfect Prompt can use its Minimal Engine prompt instead.'});
   }
   const parts=data?.candidates?.[0]?.content?.parts;
   const prompt=Array.isArray(parts)?parts.map(part=>typeof part?.text==='string'?part.text:'').join('').trim():'';
@@ -51,7 +51,7 @@ export default async function handler(req,res){
  }catch(error){
   const timedOut=error instanceof Error&&error.name==='AbortError';
   console.error('Gemini endpoint error',timedOut?'timeout':error);
-  return send(res,502,{error:timedOut?'Gemini timed out. Perfect Prompt can use its local compiler instead.':'Gemini is temporarily unavailable.'});
+  return send(res,502,{error:timedOut?'Gemini timed out. Perfect Prompt can use its Minimal Engine prompt instead.':'Gemini is temporarily unavailable.'});
  }finally{
   clearTimeout(timer);
  }
