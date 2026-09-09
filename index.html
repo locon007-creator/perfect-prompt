@@ -6,6 +6,24 @@
   <meta name="theme-color" content="#011126" />
   <link rel="stylesheet" href="/src/selector-layout.css" />
   <title>Perfect Prompt</title>
+  <script>
+    (() => {
+      const transientKeys = [
+        'perfect-prompt:last',
+        'perfect-prompt:idea',
+        'perfect-prompt:prompt',
+        'perfect-prompt:generation',
+        'perfect-prompt:session',
+        'perfect-prompt:parsed-lock',
+        'perfect-prompt:inference'
+      ];
+      for (const key of transientKeys) {
+        localStorage.removeItem(key);
+        sessionStorage.removeItem(key);
+      }
+      window.name = '';
+    })();
+  </script>
 </head>
 <body>
   <div id="root"></div>
