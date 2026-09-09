@@ -1,0 +1,1 @@
+export const IDEA_CHARACTER_LIMIT = 5000;
