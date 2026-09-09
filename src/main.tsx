@@ -1,6 +1,6 @@
 import React,{useMemo,useState}from'react';
 import{createRoot}from'react-dom/client';
-import{generate}from'./compiler';
+import{buildInitialPrompt,chooseAIPrompt}from'./generation-flow';
 import{requestAIGeneration}from'./ai-generator';
 import{buildTypeOptions,type BuildType}from'./intent';
 import{creationFormatOptions,type CreationFormat}from'./creation-format';
@@ -64,7 +64,7 @@ function App(){
  const category=getStarterCategory(activeCategory);
 
  function navigate(next:Screen){setScreen(next);setMenuOpen(false);setBuildPickerOpen(false);setFormatPickerOpen(false);setVisualPickerOpen(false);setConfirmClear(false)}
- function go(){if(!buildType||!creationFormat||!visualStyle){setError('Choose what to build, the format, and the visual style first.');return}try{const compiled=generate(idea,{buildType,creationFormat,visualStyle});setPrompt(compiled);setError('');void requestAIGeneration({idea,compiledPrompt:compiled,buildType,creationFormat,visualStyle}).then(next=>{setPrompt(next);setError('')}).catch(()=>{})}catch(e){setError(e instanceof Error?e.message:'Please add more detail.')}}
+ function go(){if(!buildType||!creationFormat||!visualStyle){setError('Choose what to build, the format, and the visual style first.');return}try{const compiled=buildInitialPrompt(idea,{buildType,creationFormat,visualStyle});setPrompt(compiled);setError('');void requestAIGeneration({idea,compiledPrompt:compiled,buildType,creationFormat,visualStyle}).then(next=>{setPrompt(chooseAIPrompt(compiled,next,buildType));setError('')}).catch(()=>{})}catch(e){setError(e instanceof Error?e.message:'Please add more detail.')}}
  async function paste(){try{const text=await navigator.clipboard.readText();setIdea(text.slice(0,IDEA_CHARACTER_LIMIT));setError('')}catch{setError('Clipboard access was blocked. Tap and hold in the idea box to paste.')}}
  function clearIdea(){setIdea('');setError('')}
  function clearPrompt(){setPrompt('')}
