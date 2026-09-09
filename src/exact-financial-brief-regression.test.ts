@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { assemble, compile, generate } from './compiler';
+import { generate } from './compiler';
 
 const brief = `APP BRIEF — PERSONAL FINANCIAL ASSISTANT
 
@@ -101,35 +101,17 @@ No analytics dashboard.`;
 const options = {
   buildType: 'app-web-app' as const,
   creationFormat: 'ios-app' as const,
-  visualStyle: 'figma-level-product-design' as const,
+  visualStyle: 'figma-product' as const,
 };
 
 describe('exact financial assistant brief', () => {
   it('generates without an exclusion violation and preserves fixed/variable income logic', () => {
-    const prompt = compile(brief, options);
-    const output = assemble(prompt);
-    const needle = 'ask for a permanent amount';
-    const surfaces = {
-      workflow: prompt.workflow,
-      screens: prompt.screens,
-      features: prompt.features,
-      states: prompt.states,
-      visual: prompt.visual,
-      constraints: prompt.constraints,
-      lockRequired: prompt.lock.requiredFeatures,
-      lockStates: prompt.lock.stateRules,
-      lockConstraints: prompt.lock.constraints,
-      outputCore: output.split('Core Features')[1]?.split('Interaction & State Rules')[0] || '',
-      outputStates: output.split('Interaction & State Rules')[1]?.split('Visual Direction')[0] || '',
-    };
-    const contaminated = Object.entries(surfaces).filter(([, value]) => JSON.stringify(value).toLowerCase().includes(needle));
-    console.log('EXCLUSION_CONTAMINATION', JSON.stringify(contaminated, null, 2));
-
     expect(() => generate(brief, options)).not.toThrow();
-    const generated = generate(brief, options);
-    expect(generated).toContain('Welcome → Income Setup → Bills Setup → Credit Cards → Setup Complete → Home → Ongoing Financial Assistant');
-    expect(generated.toLowerCase()).toContain('fixed');
-    expect(generated.toLowerCase()).toContain('variable');
-    expect(generated.toLowerCase()).toContain('expected amount');
+    const output = generate(brief, options);
+    expect(output).toContain('Welcome → Income Setup → Bills Setup → Credit Cards → Setup Complete → Home → Ongoing Financial Assistant');
+    expect(output.toLowerCase()).toContain('fixed');
+    expect(output.toLowerCase()).toContain('variable');
+    expect(output.toLowerCase()).toContain('expected amount');
+    expect(output).not.toContain('Exclusion violation');
   });
 });
