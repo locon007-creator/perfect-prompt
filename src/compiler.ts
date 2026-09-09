@@ -29,7 +29,7 @@ const workflowAction = /^(?:punch\s+(?:in|out)|start\s+my\s+day|start\s+route|da
 const actionableLead = /^(?:show|use|choose|allow|ask|set|save|record|display|provide|remember|support|enter|select|keep|default|open|tap|press|mark|update|calculate|track|add|edit|delete)\b/i;
 const conditionalLabel = /^(?:if\b|when\b|whenever\b|only\s+when\b|otherwise\b|for\b)[^:]{0,100}:\s*$/i;
 const conditionalInline = /^(?:only\s+when\b|otherwise\b)/i;
-const negativeLead = /^(?:do not|don't|never|no\b|without\b)/i;
+const negativeClause = /(?:^|[:;,.]\s*|\b)(?:do not|don't|never|without|with\s+no|but\s+no|no\s+)(?=\S)/i;
 
 const normalizeBrief = (raw: string) => raw
   .split(/\r?\n/)
@@ -126,11 +126,12 @@ const extractConditionalExtras = (raw: string) => {
 const exclusionEcho = (value: string, exclusions: readonly string[]) => {
   const key = normalized(value);
   if (!key) return false;
+  const negated = negativeClause.test(stripBullet(value));
   return exclusions.some(exclusion => {
     const excluded = normalized(exclusion);
     if (!excluded) return false;
     if (key === excluded) return true;
-    return negativeLead.test(stripBullet(value)) && key.includes(excluded);
+    return negated && key.includes(excluded);
   });
 };
 
