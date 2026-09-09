@@ -1,280 +1,174 @@
-import * as legacy from './compiler-legacy';
-import { getSpecialistProfile, type BuildType } from './intent';
-import type { CreationFormat } from './creation-format';
-import type { VisualStyle } from './visual-style';
-import { inferMinimumViableProduct } from './format-inference';
+import * as core from './compiler-core';
 
-export const InputSchema = legacy.InputSchema;
-export type Input = import('./compiler-legacy').Input;
-export type GenerateOptions = import('./compiler-legacy').GenerateOptions;
-export type IdeaLock = import('./compiler-legacy').IdeaLock;
-export type Prompt = import('./compiler-legacy').Prompt;
+export const InputSchema = core.InputSchema;
+export type Input = import('./compiler-core').Input;
+export type GenerateOptions = import('./compiler-core').GenerateOptions;
+export type IdeaLock = import('./compiler-core').IdeaLock;
+export type Prompt = import('./compiler-core').Prompt;
+export type { BuildType, CreationFormat, VisualStyle } from './compiler-core';
+
 type PromptWithSettings = Prompt & { settings?: string[] };
 
 const clean = (value: string) => value.replace(/[.!?]+$/, '').trim();
-const unique = (items: string[]) => items.filter((item, index) => items.findIndex(other => other.toLowerCase() === item.toLowerCase()) === index);
+const normalized = (value: string) => clean(value)
+  .replace(/^#+\s*/, '')
+  .replace(/^[-*•]\s*/, '')
+  .replace(/:\s*$/, '')
+  .toLowerCase()
+  .replace(/[^a-z0-9]+/g, ' ')
+  .trim();
+const unique = (items: string[]) => items.filter((item, index) =>
+  items.findIndex(other => normalized(other) === normalized(item)) === index
+);
+const stripBullet = (value: string) => value.replace(/^\s*(?:[-*•]|\d+[.)])\s*/, '').trim();
 const sentenceLine = (value: string) => {
   const line = clean(value);
   return line ? `${line[0].toUpperCase()}${line.slice(1)}.` : '';
 };
-const freeze = <T>(value: T): Readonly<T> => {
-  if (value && typeof value === 'object' && !Object.isFrozen(value)) {
-    Object.freeze(value);
-    for (const child of Object.values(value as object)) freeze(child);
-  }
-  return value as Readonly<T>;
-};
-const sentenceUnits = (text: string) => unique([
-  ...text.split(/\r?\n/).map(clean).filter(Boolean),
-  ...(text.match(/(?:[^.!?]|\.(?=\d))+(?:[.!?]|$)/g) || []).map(clean).filter(Boolean),
-]);
-const splitHumanList = (value: string) => value
-  .replace(/\s+\bor\b\s+/gi, ',')
-  .split(/,|;|\r?\n|\s+\band\b\s+/gi)
-  .map(clean)
-  .filter(Boolean);
-const stripNegativeLead = (value: string) => value
-  .replace(/^(?:do not|don't)\s+(?:add|include|use|create|show|enable|allow)?\s*/i, '')
-  .replace(/^without\s+/i, '')
-  .replace(/^no\s+/i, '')
-  .replace(/^(?:a|an|the)\s+/i, '')
-  .trim();
-const stripInlineNegative = (value: string) => clean(value.replace(/\s*(?:[.;]\s*)?(?:(?:but\s+)?without|with\s+no|but\s+no|do not|don't|no)\s+.+$/i, ''));
 
-const extractExclusions = (text: string) => {
-  const found: string[] = [];
-  const patterns = [/\bwithout\s+([^.;]+)/gi, /\b(?:do not|don't)\s+([^.;]+)/gi, /\bno\s+([^.;]+)/gi];
-  for (const pattern of patterns) {
-    for (const match of text.matchAll(pattern)) {
-      const body = (match[1] || '').replace(/^(?:add|include|use|create|show|enable|allow)\s+/i, '');
-      found.push(...splitHumanList(body).map(stripNegativeLead));
+const workflowLabel = /^(?:(?:primary|main)\s+)?(?:workflow|flow|steps|process)\s*:?(.*)$/i;
+const workflowSeparator = /→|->|;|\bthen\b/gi;
+const transientAction = /^(?:save|submit|continue|cancel|finish|complete|confirm|delete|remove|done)$/i;
+const malformedFragment = /^(?:allow|include|record|show|add|use|provide|ask|then asking|bill schedules?)\s*[:.\-]?\s*$/i;
+const genericEmptyLabel = /^[A-Za-z][A-Za-z /&+-]{0,36}:\s*$/;
+const negativeLead = /^(?:no\b|do not\b|don't\b|without\b)/i;
+
+const extractExplicitWorkflow = (raw: string) => {
+  const lines = raw.split(/\r?\n/);
+  for (let index = 0; index < lines.length; index++) {
+    const candidate = lines[index].trim().replace(/^#+\s*/, '');
+    const match = workflowLabel.exec(candidate);
+    if (!match) continue;
+    const inline = clean(match[1] || '');
+    if (inline) return inline;
+    for (let next = index + 1; next < lines.length; next++) {
+      const value = stripBullet(lines[next]);
+      if (!value) continue;
+      return clean(value);
     }
   }
-  return unique(found.filter(Boolean));
+  return '';
 };
 
-const explicitStructureHeading = (text: string) => /(?:^|\n)\s*(?:screens|pages|views)\s*:/i.test(text);
-const workflowAction = /^(?:punch\s+(?:in|out)|start\s+my\s+day|start\s+route|day\s+complete|finish\s+day|start\s+(?:work|shift)|end\s+(?:work|shift)|save|submit|continue|cancel|finish|complete|confirm)$/i;
-const behaviorLikeStructure = /\b(?:opens?|shows?|allows?|pressing|tapping|tap|clicking|use|provide)\b/i;
-const settingsOptionStructure = /^(?:theme(?:\s+with\s+.*)?|light|dark|automatic|auto|time\s*format|date\s*format|payment preferences?)$/i;
-const workflowViews = (workflow: string) => workflow
-  .split(/→|->|,|;|\band\b|\bthen\b/gi)
+const workflowViews = (workflow: string) => unique(workflow
+  .split(workflowSeparator)
+  .flatMap(part => part.split(/\s*,\s*/))
   .map(clean)
   .filter(Boolean)
-  .filter(step => !workflowAction.test(step) && !behaviorLikeStructure.test(step) && !settingsOptionStructure.test(step));
-const cleanStructures = (text: string, screens: readonly string[]) => {
-  if (explicitStructureHeading(text)) return unique([...screens].filter(screen => !settingsOptionStructure.test(clean(screen))));
-  return unique([...screens].filter(screen => !workflowAction.test(clean(screen)) && !behaviorLikeStructure.test(screen) && !settingsOptionStructure.test(clean(screen))));
-};
-
-const requirementLead = /^(?:(?:only\s+)?(?:when\b|during\b|beginning\b|starting\b|pressing\b|show\b|allow\b|use\b|provide\b|include\b|record\b|add\b|mark\b|edit\b|delete\b|remove\b|calculate\b|track\b|set\b|update\b)|(?:also\s+)?include\b|[A-Z][A-Za-z0-9 &/+-]{0,48}\s+should\b)/i;
-const extractNaturalRequirements = (text: string) => unique(sentenceUnits(text)
-  .filter(unit => requirementLead.test(unit))
-  .filter(unit => !/^(?:no\b|do not\b|don't\b|without\b)/i.test(unit))
-  .map(stripInlineNegative)
-  .filter(Boolean));
-
-const extractDeclaredFields = (text: string, kind: 'required' | 'optional') => {
-  const fields: string[] = [];
-  for (const unit of sentenceUnits(text)) {
-    for (const part of unit.split(/,|\s+\band\b\s+/i).map(clean).filter(Boolean)) {
-      const match = new RegExp(`^(.+?)\\s+${kind}$`, 'i').exec(part);
-      if (match?.[1]) fields.push(clean(match[1]));
-    }
-  }
-  return unique(fields);
-};
-
-const extractContainedFields = (text: string) => {
-  const match = /(?:must\s+contain|contains?)\s+(?:only\s+)?(?:these\s+)?(?:\w+\s+)?fields?\s*:\s*((?:\r?\n\s*[-*]\s*[^\r\n]+)+)/i.exec(text);
-  if (!match?.[1]) return [];
-  const fields = match[1].split(/\r?\n/)
-    .map(line => clean(line.replace(/^\s*[-*]\s*/, '')))
-    .filter(Boolean);
-  return fields.length ? [`Use only these fields: ${fields.join(', ')}`] : [];
-};
-
-const extractContinuityRules = (text: string) => {
-  const found: string[] = [];
-  for (const match of text.matchAll(/\b[^:\n]{0,48}continuity\s+is\s+required\s*:\s*([^.!?]+(?:[.!?]|$))/gi)) {
-    if (match[1]) found.push(clean(match[1]));
-  }
-  return unique(found);
-};
-
-const extractPersistence = (text: string) => unique(sentenceUnits(text)
-  .filter(unit => /^(?:save|store|persist)\b/i.test(unit) || /^use\b.*\bstorage\b/i.test(unit))
-  .map(stripInlineNegative)
-  .filter(Boolean));
-
-const extractPersistentState = (text: string) => unique(
-  [...text.matchAll(/\bpersistent\s+[^,.;]*?\bstate\b/gi)]
-    .map(match => clean(match[0]))
-    .filter(Boolean)
-    .map(value => `Maintain ${value}`)
+  .filter(step => !transientAction.test(step))
 );
 
-const conditionalLead = /^(?:when\b|whenever\b|if\b|once\b|on\b|beginning\b|starting\b|(?:\w+\s+){0,3}(?:days?|weeks?|months?)\s+(?:before|after)\b)/i;
-const extractConditionalStates = (text: string) => unique(sentenceUnits(text)
-  .filter(unit => conditionalLead.test(unit))
-  .filter(unit => /\b(?:show|ask|prompt|notify|surface|open|update|save|confirm|require|allow|calculate|record|mark|use)\b/i.test(unit))
-  .map(stripInlineNegative)
-  .filter(Boolean));
+const looksLikeHeading = (line: string, workflowSteps: readonly string[]) => {
+  const raw = line.trim();
+  if (!raw) return false;
+  const value = raw.replace(/^#+\s*/, '').replace(/:\s*$/, '').trim();
+  if (workflowSteps.some(step => normalized(step) === normalized(value))) return true;
+  if (/^#{1,4}\s+\S/.test(raw)) return true;
+  if (value.length <= 56 && /^[A-Z0-9][A-Z0-9 &/+-]+$/.test(value) && value.split(/\s+/).length <= 8) return true;
+  return false;
+};
 
-const extractExtraStates = (text: string) => unique([
-  ...sentenceUnits(text).filter(unit => /^(?:navigation\b.*\bopen externally|navigation can open externally)$/i.test(unit)).map(clean),
-  ...extractPersistentState(text),
-  ...extractConditionalStates(text),
-]);
+const isMalformedFragment = (line: string) => {
+  const value = stripBullet(line);
+  return !value || malformedFragment.test(value) || genericEmptyLabel.test(value);
+};
 
-const extractMobileConstraints = (text: string) => {
+const extractOwnedSectionRequirements = (raw: string, workflowSteps: readonly string[]) => {
+  const lines = raw.split(/\r?\n/);
   const found: string[] = [];
-  for (const unit of sentenceUnits(text)) {
-    if (/^Target\b/i.test(unit) || /^Keep\s+it\s+strictly\b/i.test(unit)) {
-      const safe = stripInlineNegative(unit);
-      if (safe) found.push(safe);
+
+  for (const step of workflowSteps) {
+    const headingIndex = lines.findIndex(line => normalized(line) === normalized(step));
+    if (headingIndex < 0) continue;
+
+    for (let index = headingIndex + 1; index < lines.length; index++) {
+      const rawLine = lines[index];
+      if (!rawLine.trim()) continue;
+      if (looksLikeHeading(rawLine, workflowSteps)) break;
+      const value = stripBullet(rawLine);
+      if (isMalformedFragment(value) || negativeLead.test(value)) continue;
+      found.push(`${step}: ${clean(value)}`);
     }
-    const match = /\b(?:optimized|designed)\s+for\s+(\d+\s*[–-]\s*\d+\s*px[^,.;]*?(?:large|thumb|touch)[^,.;]*?targets?)/i.exec(unit);
-    if (match?.[1]) found.push(`Keep the interface optimized for ${clean(match[1])}`);
   }
+
   return unique(found);
 };
 
-const extractExplicitSettings = (text: string) => {
-  const marker = /\bSettings\s*:/i.exec(text);
-  if (!marker) return [];
-  const after = text.slice((marker.index ?? 0) + marker[0].length);
-  const body = after.split(/\n\s*\n/)[0].trim();
-  if (!body) return [];
-  const lines: string[] = [];
-  for (const sentence of (body.match(/[^.!?]+(?:[.!?]|$)/g) || [body])) {
-    let value = clean(sentence.replace(/^\s*(?:also\s+)?include\s+/i, ''));
-    if (!value || /^(?:no|do not|don't)\b/i.test(value)) continue;
-    if (/^Theme\s+with\s+Light\s*,\s*Dark\s*,\s*and\s+Automatic$/i.test(value)) {
-      lines.push('Theme: Light / Dark / Automatic');
+const conditionalLead = /^(?:if\b|when\b|whenever\b|only\s+when\b|once\b|otherwise\b|before\b|after\b|on\b|for\s+.+?,)/i;
+const conditionalLabel = /^(?:if\b|when\b|whenever\b|only\s+when\b|otherwise\b|for\b)[^:]{0,80}:\s*$/i;
+
+const extractConditionalRules = (raw: string, workflowSteps: readonly string[]) => {
+  const lines = raw.split(/\r?\n/);
+  const rules: string[] = [];
+
+  for (let index = 0; index < lines.length; index++) {
+    const value = stripBullet(lines[index]);
+    if (!value) continue;
+
+    if (conditionalLabel.test(value)) {
+      const prefix = value.replace(/:\s*$/, '');
+      for (let next = index + 1; next < lines.length; next++) {
+        const childRaw = lines[next];
+        if (!childRaw.trim()) continue;
+        if (looksLikeHeading(childRaw, workflowSteps) || conditionalLabel.test(stripBullet(childRaw))) break;
+        const child = stripBullet(childRaw);
+        if (isMalformedFragment(child)) continue;
+        rules.push(`${prefix}: ${clean(child)}`);
+      }
       continue;
     }
-    if (/^Manage Credit Cards\s+and\s+Income Schedule$/i.test(value)) {
-      lines.push('Manage Credit Cards', 'Income Schedule');
-      continue;
-    }
-    if (/^Home Base\s+and\s+Truck Profiles$/i.test(value)) {
-      lines.push('Home Base', 'Truck Profiles');
-      continue;
-    }
-    lines.push(value);
+
+    if (conditionalLead.test(value)) rules.push(clean(value));
   }
-  return unique(lines);
+
+  return unique(rules);
 };
 
-const inferSettings = (text: string, creationFormat?: CreationFormat) => {
-  const richFormat = ['android-app', 'ios-app', 'responsive-web-app', 'desktop-app', 'multi-screen-app'].includes(creationFormat || '');
-  if (!richFormat) return [];
-  const lower = text.toLowerCase();
-  if (/timesheet|time sheet|work hours|punch in|punch out/.test(lower)) return ['Time format preference', 'Theme: Light / Dark / Automatic', 'History and saved-workday management'];
-  if (/budget|financial|finance|income|bills|credit card/.test(lower)) return ['Theme: Light / Dark / Automatic', 'Manage recurring financial items', 'Income schedule', 'Data management'];
-  if (/drop\s*&?\s*hook|truck|driver|trailer/.test(lower)) return ['Theme: Light / Dark / Automatic', 'Saved work profiles'];
-  return [];
-};
-
-const titleFromFirstLine = (text: string, fallback: string) => {
-  const first = clean(text.split(/\r?\n/)[0] || '');
-  if (!first || first.length > 64 || /^(?:build|create|make|design|role|product|primary|main)\b/i.test(first)) return fallback;
-  return first;
-};
-const compactPrimaryJob = (value: string, appName: string) => {
-  let job = clean(value.split(/\b(?:Workflow|Screens?|Pages?|Views?|Required features?|Optional features?|Rules?)\s*:/i)[0] || value);
-  job = job.replace(/^(?:build|create|make|design)\s+/i, '').trim();
-  const escaped = appName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  job = job.replace(new RegExp(`^${escaped}\\s+(?:for|to)\\s+`, 'i'), '').trim();
-  return job || clean(value);
-};
-const normalized = (value: string) => clean(value).toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
-const removeProductEcho = (features: readonly string[], lock: IdeaLock) => features.filter(feature => {
-  const value = normalized(feature);
-  return value !== normalized(lock.appName) && value !== normalized(lock.primaryJob);
-});
-
-const sanitizeRole = (role: string) => role.replace(/([.!?]\s+)You are\s+/g, '$1Also act as ');
-const conciseRole = (role: string, buildType?: BuildType) => {
-  const sanitized = sanitizeRole(role);
-  if (buildType !== 'app-web-app') return sanitized;
-  const first = sanitized.match(/^.*?[.!?](?:\s|$)/)?.[0]?.trim() || 'You are a senior product designer and Full-Stack Application Engineer.';
-  const design = sanitized.match(/Also act as .+$/)?.[0];
-  return design ? `${first} ${design}` : first;
-};
-const appBuildConstraints = (buildType?: BuildType) => buildType === 'app-web-app' ? [
-  'Build the first version as one complete single self-contained index.html with inline CSS and JavaScript unless the locked idea explicitly requests another stack; Multiple screens must behave as fully functional app views with the navigation, interaction, state, persistence, forms, sheets, dialogs, and timers the locked requirements need.',
-  'Keep the first version directly runnable and previewable without a build step, with logic organized so it can be split into multiple files later if the product grows.',
-] : [];
-const missionFor = (base: Prompt, lock: IdeaLock, buildType?: BuildType) => {
-  if (buildType === 'app-web-app') return `Build ${lock.appName} for ${lock.targetUser}. Primary job: ${compactPrimaryJob(lock.primaryJob, lock.appName)}.`;
-  return base.mission;
-};
+const freezeLock = (lock: IdeaLock): IdeaLock => Object.freeze({
+  ...lock,
+  screens: Object.freeze([...lock.screens]),
+  requiredFeatures: Object.freeze([...lock.requiredFeatures]),
+  optionalFeatures: Object.freeze([...lock.optionalFeatures]),
+  stateRules: Object.freeze([...lock.stateRules]),
+  persistenceRules: Object.freeze([...lock.persistenceRules]),
+  visualRequirements: Object.freeze([...lock.visualRequirements]),
+  constraints: Object.freeze([...lock.constraints]),
+  explicitExclusions: Object.freeze([...lock.explicitExclusions]),
+  lockedInstructions: Object.freeze([...lock.lockedInstructions]),
+}) as IdeaLock;
 
 export function parseIdea(raw: string): IdeaLock {
-  const text = InputSchema.parse({ idea: raw }).idea;
-  const base = legacy.parseIdea(text);
-  const screens = cleanStructures(text, base.screens);
-  const continuity = extractContinuityRules(text);
-  let baseRequired = [...base.requiredFeatures];
-  if (continuity.length) baseRequired = baseRequired.filter(item => !/pickup trailer|drop trailer|continues through the route/i.test(item));
-  const declaredRequired = extractDeclaredFields(text, 'required');
-  const declaredOptional = extractDeclaredFields(text, 'optional');
-  const requiredDeclaration = declaredRequired.length ? [`Require ${declaredRequired.join(' and ')}`] : [];
-  const requiredFeatures = unique([
-    ...baseRequired,
-    ...extractNaturalRequirements(text),
-    ...requiredDeclaration,
-    ...extractContainedFields(text),
-    ...continuity,
-  ]).filter(feature => !/^(?:no\b|do not\b|don't\b|without\b)/i.test(feature));
-  const optionalFeatures = unique([...base.optionalFeatures, ...declaredOptional]);
-  const persistenceRules = extractPersistence(text);
-  const stateRules = unique([...base.stateRules, ...extractExtraStates(text)]);
-  const constraints = unique([...base.constraints, ...extractMobileConstraints(text)]);
-  const explicitExclusions = extractExclusions(text);
-  const lock = {
+  const base = core.parseIdea(raw);
+  const explicitWorkflow = extractExplicitWorkflow(raw);
+  const workflow = explicitWorkflow || base.workflow;
+  const views = workflowViews(workflow);
+  const owned = extractOwnedSectionRequirements(raw, views);
+  const conditional = extractConditionalRules(raw, views);
+
+  return freezeLock({
     ...base,
-    appName: titleFromFirstLine(text, base.appName),
-    screens,
-    requiredFeatures,
-    optionalFeatures,
-    stateRules,
-    persistenceRules,
-    constraints,
-    explicitExclusions,
-  } satisfies IdeaLock;
-  return freeze(lock) as IdeaLock;
+    workflow,
+    screens: unique([...base.screens, ...views]),
+    requiredFeatures: unique([...base.requiredFeatures, ...owned]).filter(item => !isMalformedFragment(item)),
+    stateRules: unique([...base.stateRules, ...conditional]).filter(item => !isMalformedFragment(item)),
+  });
 }
 
 export function compile(raw: string, options: GenerateOptions = {}): PromptWithSettings {
-  const base = legacy.compile(raw, options);
-  const lock = parseIdea(raw);
-  const inferred = options.buildType === 'app-web-app'
-    ? inferMinimumViableProduct(raw, lock, options.creationFormat || 'idea-decides')
-    : { features: [], screens: [], states: [] };
-  const features = options.buildType === 'app-web-app'
-    ? unique([...removeProductEcho(lock.requiredFeatures, lock), ...inferred.features])
-    : inferred.features.length
-      ? unique([...removeProductEcho(lock.requiredFeatures, lock), ...inferred.features])
-      : [...lock.requiredFeatures];
-  const explicitSettings = extractExplicitSettings(raw);
-  const settings = explicitSettings.length ? explicitSettings : options.buildType === 'app-web-app' ? inferSettings(raw, options.creationFormat) : [];
-  const blueprintScreens = options.buildType === 'app-web-app' ? workflowViews(lock.workflow) : [];
+  const snapshot = `${raw}`;
+  const base = core.compile(snapshot, { ...options });
+  const lock = parseIdea(snapshot);
+  const views = workflowViews(lock.workflow);
+  const owned = extractOwnedSectionRequirements(snapshot, views);
+  const conditional = extractConditionalRules(snapshot, views);
+
   return {
     ...base,
-    role: conciseRole(base.role, options.buildType),
-    mission: missionFor(base, lock, options.buildType),
     lock,
-    targetUser: lock.targetUser,
     workflow: lock.workflow,
-    screens: unique([...lock.screens, ...blueprintScreens, ...inferred.screens]).filter(screen => !settingsOptionStructure.test(clean(screen))),
-    features,
-    states: unique([...lock.stateRules, ...lock.persistenceRules, ...inferred.states]),
-    constraints: unique([...lock.constraints, ...appBuildConstraints(options.buildType)]),
-    doNotAdd: [...lock.explicitExclusions],
-    settings,
+    screens: unique([...base.screens, ...lock.screens, ...views]),
+    features: unique([...base.features, ...owned]).filter(item => !isMalformedFragment(item)),
+    states: unique([...base.states, ...lock.stateRules, ...lock.persistenceRules, ...conditional]).filter(item => !isMalformedFragment(item)),
   };
 }
 
@@ -288,194 +182,49 @@ const replaceSection = (output: string, name: string, next: string, body: string
   if (endAt < 0) return output;
   return `${output.slice(0, bodyAt)}${body}${output.slice(endAt)}`;
 };
-const replaceTailSection = (output: string, name: string, body: string) => {
-  const start = `${name}\n\n`;
-  const startAt = output.indexOf(start);
-  if (startAt < 0) return output;
-  return `${output.slice(0, startAt + start.length)}${body}`;
-};
-const insertBeforeSection = (output: string, name: string, heading: string, body: string) => {
-  if (!body.trim() || output.includes(`\n\n${heading}\n\n`)) return output;
-  const marker = `\n\n${name}\n\n`;
-  const at = output.indexOf(marker);
-  if (at < 0) return output;
-  return `${output.slice(0, at)}\n\n${heading}\n\n${body.trim()}${output.slice(at)}`;
-};
-const sectionBody = (output: string, name: string, next: string) => output.split(`${name}\n\n`)[1]?.split(`\n\n${next}\n\n`)[0] || '';
-const compactLock = (prompt: Prompt) => [
-  `Project type: ${getSpecialistProfile(prompt.buildType || 'general').label}`,
-  `Creation format: ${prompt.formatLabel}`,
-  `Project name: ${prompt.lock.appName}`,
-  `Primary job: ${compactPrimaryJob(prompt.lock.primaryJob, prompt.lock.appName)}`,
-  `Target user: ${prompt.lock.targetUser}`,
-  `Platform / medium: ${prompt.platform}`,
-].join('\n');
-const compactQuality = (output: string) => {
-  const lines = unique(sectionBody(output, 'Build Quality & Brand Experience', 'Constraints').split(/\r?\n/).map(line => line.trim()).filter(Boolean));
-  if (lines.length <= 4) return lines.join('\n');
-  const guard = lines.find(line => /generic template|placeholder styling|stock component/i.test(line));
-  return unique([...lines.slice(0, 3), ...(guard ? [guard] : [lines[3]])]).slice(0, 4).join('\n');
-};
-const legacyStateOwnedSignal = /(actual amount|confirmation when necessary|re-enter|scheduled income|scheduled bill)/i;
-const stateOwnedCoreLine = (line: string, states: readonly string[]) => {
-  const source = clean(line);
-  const stateShaped = conditionalLead.test(source) || /^(?:save|store|persist|maintain)\b/i.test(source) || legacyStateOwnedSignal.test(source);
-  if (!stateShaped) return false;
-  const value = normalized(source);
-  return states.some(state => {
-    const stateValue = normalized(state);
-    if (!value || !stateValue) return false;
-    if (value === stateValue) return true;
-    if (legacyStateOwnedSignal.test(source) && legacyStateOwnedSignal.test(state)) return true;
-    return value.length >= 30 && stateValue.length >= 30 && (value.includes(stateValue) || stateValue.includes(value));
-  });
-};
-const orphanLine = /^(?:show|add|record|include|then asking|bill schedules?)\s*[:.]?$/i;
-const compactSemanticLines = (lines: string[]) => {
-  const cleaned = unique(lines.map(line => line.trim()).filter(Boolean).filter(line => !orphanLine.test(line)));
-  return cleaned.filter((line, index) => {
-    const value = normalized(line);
-    if (value.length < 18) return true;
-    return !cleaned.some((other, otherIndex) => {
-      if (otherIndex === index) return false;
-      const otherValue = normalized(other);
-      return otherValue.length > value.length + 12 && otherValue.includes(value);
-    });
-  });
-};
-const polishCoreLine = (line: string) => {
-  let value = line.trim();
-  value = value.replace(/^Record\s+Add\s+/i, 'Add ');
-  value = value.replace(/^Help\s+the\s+user\s+set\s+up\s+their\s+/i, "Set up the user's ");
-  value = value.replace(/^Help\s+the\s+user\s+set\s+up\s+/i, 'Set up ');
-  value = value.replace(/^Recurring monthly bills once\.?$/i, 'Set up recurring monthly bills once and reuse their saved schedules.');
-  value = value.replace(/^Then make (.+?) mostly automatic with (.+?)\.?$/i, 'Manage $1 automatically with $2.');
-  value = value.replace(/^Then make (.+?) automatic with (.+?)\.?$/i, 'Manage $1 automatically with $2.');
-  return value;
-};
-const polishCore = (output: string, prompt: PromptWithSettings) => compactSemanticLines(
-  sectionBody(output, 'Core Features', 'Interaction & State Rules')
-    .split(/\r?\n/)
-    .map(line => line.trim())
-    .filter(Boolean)
-    .filter(line => !stateOwnedCoreLine(line, prompt.states))
-    .map(polishCoreLine)
-    .filter(Boolean)
-).join('\n');
-const validationCoreFeatures = (prompt: PromptWithSettings) => prompt.features
-  .filter(feature => !stateOwnedCoreLine(feature, prompt.states))
-  .map(feature => {
-    const polished = clean(polishCoreLine(sentenceLine(feature)));
-    return polished.toLowerCase() === clean(feature).toLowerCase() ? feature : polished;
-  });
-const completionFor = (prompt: Prompt) => {
-  if (prompt.buildType !== 'app-web-app') return prompt.completion;
-  return prompt.lock.workflow
-    ? 'Implement every locked requirement, preserve the explicitly provided workflow, and add no unrequested screens or features.'
-    : 'Implement every locked requirement exactly and add no unrequested screens, features, integrations, roles, or workflows.';
-};
-const purifySection = (output: string, name: string, next: string) => {
-  const body = sectionBody(output, name, next);
-  if (!body) return output;
-  return replaceSection(output, name, next, compactSemanticLines(body.split(/\r?\n/)).join('\n'));
-};
-const purifyOutput = (output: string) => {
-  let next = output;
-  next = purifySection(next, 'Core Features', 'Interaction & State Rules');
-  next = purifySection(next, 'Interaction & State Rules', next.includes('\n\nSettings\n\n') ? 'Settings' : 'Visual Direction');
-  return next.replace(/\n{3,}/g, '\n\n').trim();
-};
+
+const sectionBody = (output: string, name: string, next: string) =>
+  output.split(`${name}\n\n`)[1]?.split(`\n\n${next}\n\n`)[0] || '';
+
+const sanitizeOutput = (output: string) => output
+  .split(/\r?\n/)
+  .filter(line => !isMalformedFragment(line))
+  .join('\n')
+  .replace(/\n{3,}/g, '\n\n')
+  .trim();
 
 export function assemble(prompt: PromptWithSettings) {
-  let output = legacy.assemble(prompt);
-  output = replaceSection(output, 'Idea Lock', 'Target User', compactLock(prompt));
-  if (prompt.lock.optionalFeatures.length) {
-    const core = sectionBody(output, 'Core Features', 'Interaction & State Rules').trim();
-    const optional = prompt.lock.optionalFeatures.map(item => `Optional: ${sentenceLine(item)}`).join('\n');
-    output = replaceSection(output, 'Core Features', 'Interaction & State Rules', [core, optional].filter(Boolean).join('\n'));
+  let output = core.assemble(prompt);
+  if (prompt.lock.workflow) {
+    output = replaceSection(output, 'Main Workflow', 'Structure Requirements', prompt.lock.workflow);
   }
-  if (prompt.states.length) output = replaceSection(output, 'Interaction & State Rules', 'Visual Direction', compactSemanticLines(prompt.states.map(sentenceLine).filter(Boolean)).join('\n'));
-  output = replaceSection(output, 'Core Features', 'Interaction & State Rules', polishCore(output, prompt));
-  output = replaceSection(output, 'Build Quality & Brand Experience', 'Constraints', compactQuality(output));
-  if (prompt.settings?.length) output = insertBeforeSection(output, 'Visual Direction', 'Settings', unique(prompt.settings.map(sentenceLine).filter(Boolean)).join('\n'));
-  output = replaceTailSection(output, 'Completion Standard', completionFor(prompt));
-  return purifyOutput(output);
+  return sanitizeOutput(output);
 }
 
-const validateCompactLock = (prompt: Prompt, output: string) => {
-  for (const fact of compactLock(prompt).split('\n')) if (!output.toLowerCase().includes(fact.toLowerCase())) throw Error(`Locked fact missing: ${fact.split(':')[0]}`);
-};
-const validateWorkflow = (prompt: Prompt, output: string) => {
+const validateWorkflow = (prompt: PromptWithSettings, output: string) => {
   if (!prompt.lock.workflow) return;
-  const lower = sectionBody(output, 'Main Workflow', 'Structure Requirements').toLowerCase();
-  if (!lower.includes(prompt.lock.workflow.toLowerCase())) throw Error('Workflow altered or missing');
-  let from = 0;
-  for (const step of prompt.lock.workflow.split(/→|->|,|;|\band\b|\bthen\b/gi).map(clean).filter(Boolean)) {
-    const at = lower.indexOf(step.toLowerCase(), from);
-    if (at < 0) throw Error(`Workflow step missing or reordered: ${step}`);
-    from = at + step.length;
+  const body = sectionBody(output, 'Main Workflow', 'Structure Requirements');
+  if (normalized(body) !== normalized(prompt.lock.workflow)) {
+    throw Error('Workflow altered or missing');
   }
 };
-const validateOptional = (prompt: Prompt, output: string) => {
-  const core = sectionBody(output, 'Core Features', 'Interaction & State Rules');
-  const requiredOnly = core.split(/\r?\n/).filter(line => !/^Optional:\s*/i.test(line)).join('\n').toLowerCase();
-  for (const opt of prompt.lock.optionalFeatures) {
-    const marker = `Optional: ${sentenceLine(opt)}`;
-    if (!core.toLowerCase().includes(marker.toLowerCase())) throw Error(`Optional requirement missing: ${opt}`);
-    if (requiredOnly.includes(opt.toLowerCase())) throw Error(`Optional feature promoted: ${opt}`);
+
+const validateHygiene = (output: string) => {
+  for (const line of output.split(/\r?\n/)) {
+    if (isMalformedFragment(line)) throw Error(`Malformed output fragment: ${line.trim()}`);
   }
 };
-const validateSettings = (prompt: PromptWithSettings, output: string) => {
-  if (!prompt.settings?.length) return;
-  const lower = output.toLowerCase();
-  for (const item of prompt.settings) {
-    const tokens = normalized(item).split(' ').filter(token => token.length > 2 && !['with', 'and', 'the'].includes(token));
-    if (tokens.length && !tokens.every(token => lower.includes(token))) throw Error(`Setting missing: ${item}`);
-  }
-};
-const validateNoSectionDuplicates = (output: string, name: string, next: string) => {
-  const seen = new Set<string>();
-  for (const line of sectionBody(output, name, next).split(/\r?\n/).map(line => line.trim()).filter(Boolean)) {
-    const key = line.toLowerCase();
-    if (seen.has(key)) throw Error(`Purity gate rejected duplicate ${name} output: ${line}`);
-    seen.add(key);
-  }
-};
-const validatePurity = (output: string) => {
-  if (/^\s*(?:show|add|record|include|then asking|bill schedules?)\s*[:.]?\s*$/gim.test(output)) throw Error('Purity gate rejected an orphaned parser fragment');
-  validateNoSectionDuplicates(output, 'Core Features', 'Interaction & State Rules');
-  validateNoSectionDuplicates(output, 'Interaction & State Rules', output.includes('\n\nSettings\n\n') ? 'Settings' : 'Visual Direction');
-};
-const validationPrompt = (prompt: PromptWithSettings): Prompt => ({
-  ...prompt,
-  workflow: '',
-  features: [],
-  lock: {
-    ...prompt.lock,
-    workflow: '',
-    lockedInstructions: [],
-    optionalFeatures: [],
-    requiredFeatures: validationCoreFeatures(prompt),
-    screens: [...prompt.screens],
-  },
-});
 
 export function validateContradictions(prompt: PromptWithSettings, output: string) {
-  validateCompactLock(prompt, output);
   validateWorkflow(prompt, output);
-  validateOptional(prompt, output);
-  validateSettings(prompt, output);
-  validatePurity(output);
-  return legacy.validateContradictions(validationPrompt(prompt), output);
+  validateHygiene(output);
+  return core.validateContradictions(prompt, output);
 }
 
 export function validate(prompt: PromptWithSettings, output: string) {
-  validateCompactLock(prompt, output);
   validateWorkflow(prompt, output);
-  validateOptional(prompt, output);
-  validateSettings(prompt, output);
-  validatePurity(output);
-  return legacy.validate(validationPrompt(prompt), output);
+  validateHygiene(output);
+  return core.validate(prompt, output);
 }
 
 export const generate = (raw: string, options: GenerateOptions = {}) => {
@@ -485,5 +234,3 @@ export const generate = (raw: string, options: GenerateOptions = {}) => {
   validate(prompt, output);
   return output;
 };
-
-export type { BuildType, CreationFormat, VisualStyle };
