@@ -8,9 +8,10 @@ function send(res,status,body){
 }
 
 export default async function handler(req,res){
- if(req.method!=='POST')return send(res,405,{error:'Method not allowed.'});
-
  const apiKey=process.env.GEMINI_API_KEY;
+ const model=process.env.GEMINI_MODEL||DEFAULT_MODEL;
+ if(req.method==='GET')return send(res,200,{configured:Boolean(apiKey),model});
+ if(req.method!=='POST')return send(res,405,{error:'Method not allowed.'});
  if(!apiKey)return send(res,503,{error:'Gemini is not configured on this deployment.'});
 
  const body=req.body&&typeof req.body==='object'?req.body:{};
@@ -23,7 +24,6 @@ export default async function handler(req,res){
  if(!idea||!compiledPrompt)return send(res,400,{error:'Idea and compiled prompt are required.'});
  if(idea.length>MAX_IDEA_LENGTH||compiledPrompt.length>MAX_COMPILED_LENGTH)return send(res,413,{error:'Prompt input is too large.'});
 
- const model=process.env.GEMINI_MODEL||DEFAULT_MODEL;
  const instruction=`You are the final reasoning and writing engine inside Perfect Prompt.\n\nYour job is to improve the supplied deterministic compiler output into one excellent, copy-ready prompt for an AI builder.\n\nNON-NEGOTIABLE RULES:\n- The user's idea is the source of truth. Preserve its purpose, workflow, requirements, exclusions, and constraints.\n- Do not invent unrelated features, screens, accounts, dashboards, analytics, backends, or complexity.\n- Preserve the selected build type, format, and visual direction.\n- Improve clarity, ordering, completeness, usability, and implementation guidance.\n- Keep the result practical for an AI builder and focused on producing a finished, premium result.\n- Resolve redundancy and weak wording without deleting meaningful requirements.\n- Return ONLY the final prompt. No analysis, score, preamble, markdown fence, or explanation.\n\nSelected build type: ${buildType}\nSelected format: ${creationFormat}\nSelected visual style: ${visualStyle}\n\nUSER IDEA:\n${idea}\n\nDETERMINISTIC PERFECT PROMPT COMPILER OUTPUT:\n${compiledPrompt}`;
 
  const controller=new AbortController();
