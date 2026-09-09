@@ -137,19 +137,32 @@ const exclusionEcho = (value: string, exclusions: readonly string[]) => {
 const removeExclusionEchoes = (items: string[], exclusions: readonly string[]) =>
   items.filter(item => !exclusionEcho(item, exclusions));
 
+const freezeLock = (lock: IdeaLock): IdeaLock => Object.freeze({
+  ...lock,
+  screens: Object.freeze([...lock.screens]),
+  requiredFeatures: Object.freeze([...lock.requiredFeatures]),
+  optionalFeatures: Object.freeze([...lock.optionalFeatures]),
+  stateRules: Object.freeze([...lock.stateRules]),
+  persistenceRules: Object.freeze([...lock.persistenceRules]),
+  visualRequirements: Object.freeze([...lock.visualRequirements]),
+  constraints: Object.freeze([...lock.constraints]),
+  explicitExclusions: Object.freeze([...lock.explicitExclusions]),
+  lockedInstructions: Object.freeze([...lock.lockedInstructions]),
+}) as IdeaLock;
+
 export const parseIdea = (raw: string): IdeaLock => core.parseIdea(normalizeBrief(raw));
 
 export function compile(raw: string, options: GenerateOptions = {}): PromptWithSettings {
   const normalizedRaw = normalizeBrief(`${raw}`);
   const base = core.compile(normalizedRaw, { ...options }) as PromptWithSettings;
   const exclusions = base.lock.explicitExclusions;
-  const cleanedLock: IdeaLock = {
+  const cleanedLock = freezeLock({
     ...base.lock,
     requiredFeatures: removeExclusionEchoes([...base.lock.requiredFeatures], exclusions),
     stateRules: removeExclusionEchoes([...base.lock.stateRules], exclusions),
     persistenceRules: removeExclusionEchoes([...base.lock.persistenceRules], exclusions),
     constraints: removeExclusionEchoes([...base.lock.constraints], exclusions),
-  };
+  });
   const cleanedBase: PromptWithSettings = {
     ...base,
     lock: cleanedLock,
