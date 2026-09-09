@@ -63,6 +63,12 @@ const isHeading = (line: string, steps: readonly string[]) => {
 
 const hasStandaloneWorkflowBlock = (raw: string) => raw.split(/\r?\n/).some(line => standaloneWorkflowHeading.test(line));
 
+const ownedInstruction = (step: string, body: string) => {
+  const value = clean(body);
+  if (!value) return '';
+  return `${value[0].toUpperCase()}${value.slice(1)} in ${step}`;
+};
+
 const extractOwnedFeatures = (raw: string, workflow: string) => {
   if (!hasStandaloneWorkflowBlock(raw) || !workflow) return [];
   const steps = workflowSteps(workflow);
@@ -81,8 +87,8 @@ const extractOwnedFeatures = (raw: string, workflow: string) => {
       const fieldChoice = /^[A-Za-z][A-Za-z0-9 &/+-]{1,40}:\s*\S+/.test(value);
       if (!actionableLead.test(value) && !fieldChoice) continue;
       const body = stripInlineNegative(value);
-      if (!body) continue;
-      found.push(`In ${step}, ${body[0].toLowerCase()}${body.slice(1)}`);
+      const instruction = ownedInstruction(step, body);
+      if (instruction) found.push(instruction);
     }
   }
 
