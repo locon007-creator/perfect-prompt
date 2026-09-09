@@ -27,4 +27,9 @@ describe('Gemini primary reasoning instruction',()=>{
   expect(source).toContain('exclusions');
   expect(source).toContain('relationships');
  });
+
+ it('forbids relabeling requested screens with terminology the user explicitly excluded',()=>{
+  expect(source).toContain('Do not relabel a requested screen with terminology or UI patterns the USER IDEA explicitly excludes');
+  expect(source).toContain('if the USER IDEA rejects dashboards, keep Home as Home rather than renaming it a dashboard');
+ });
 });
