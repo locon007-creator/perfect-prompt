@@ -1,4 +1,4 @@
-const DEFAULT_MODEL='gemini-2.5-flash';
+const DEFAULT_MODEL='gemini-3.6-flash';
 const MAX_IDEA_LENGTH=5000;
 const MAX_COMPILED_LENGTH=20000;
 
