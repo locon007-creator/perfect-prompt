@@ -29,6 +29,7 @@ const workflowAction = /^(?:punch\s+(?:in|out)|start\s+my\s+day|start\s+route|da
 const actionableLead = /^(?:show|use|choose|allow|ask|set|save|record|display|provide|remember|support|enter|select|keep|default|open|tap|press|mark|update|calculate|track|add|edit|delete)\b/i;
 const conditionalLabel = /^(?:if\b|when\b|whenever\b|only\s+when\b|otherwise\b|for\b)[^:]{0,100}:\s*$/i;
 const conditionalInline = /^(?:only\s+when\b|otherwise\b)/i;
+const negativeLead = /^(?:do not|don't|never|no\b|without\b)/i;
 
 const normalizeBrief = (raw: string) => raw
   .split(/\r?\n/)
@@ -122,20 +123,51 @@ const extractConditionalExtras = (raw: string) => {
   return unique(found);
 };
 
+const exclusionEcho = (value: string, exclusions: readonly string[]) => {
+  const key = normalized(value);
+  if (!key) return false;
+  return exclusions.some(exclusion => {
+    const excluded = normalized(exclusion);
+    if (!excluded) return false;
+    if (key === excluded) return true;
+    return negativeLead.test(stripBullet(value)) && key.includes(excluded);
+  });
+};
+
+const removeExclusionEchoes = (items: string[], exclusions: readonly string[]) =>
+  items.filter(item => !exclusionEcho(item, exclusions));
+
 export const parseIdea = (raw: string): IdeaLock => core.parseIdea(normalizeBrief(raw));
 
 export function compile(raw: string, options: GenerateOptions = {}): PromptWithSettings {
   const normalizedRaw = normalizeBrief(`${raw}`);
   const base = core.compile(normalizedRaw, { ...options }) as PromptWithSettings;
-  const ownedFeatures = extractOwnedFeatures(raw, base.lock.workflow);
-  const conditionalExtras = extractConditionalExtras(raw);
+  const exclusions = base.lock.explicitExclusions;
+  const cleanedLock: IdeaLock = {
+    ...base.lock,
+    requiredFeatures: removeExclusionEchoes([...base.lock.requiredFeatures], exclusions),
+    stateRules: removeExclusionEchoes([...base.lock.stateRules], exclusions),
+    persistenceRules: removeExclusionEchoes([...base.lock.persistenceRules], exclusions),
+    constraints: removeExclusionEchoes([...base.lock.constraints], exclusions),
+  };
+  const cleanedBase: PromptWithSettings = {
+    ...base,
+    lock: cleanedLock,
+    features: removeExclusionEchoes([...base.features], exclusions),
+    states: removeExclusionEchoes([...base.states], exclusions),
+    constraints: removeExclusionEchoes([...base.constraints], exclusions),
+  };
+  const ownedFeatures = extractOwnedFeatures(raw, cleanedLock.workflow)
+    .filter(item => !exclusionEcho(item, exclusions));
+  const conditionalExtras = extractConditionalExtras(raw)
+    .filter(item => !exclusionEcho(item, exclusions));
 
-  if (!ownedFeatures.length && !conditionalExtras.length) return base;
+  if (!ownedFeatures.length && !conditionalExtras.length) return cleanedBase;
 
   return {
-    ...base,
-    features: unique([...base.features, ...ownedFeatures]),
-    states: unique([...base.states, ...conditionalExtras]),
+    ...cleanedBase,
+    features: unique([...cleanedBase.features, ...ownedFeatures]),
+    states: unique([...cleanedBase.states, ...conditionalExtras]),
   };
 }
 
