@@ -229,6 +229,7 @@ const removeExclusionEchoes = (items: string[], exclusions: readonly string[]) =
 const parserOnlyFragment = (value: string) => {
   const text = clean(value);
   if (!text) return true;
+  if (groupedRequirementLead.test(text)) return true;
   if (/^(?:(?:main|primary)\s+)?(?:workflow|flow|steps|process)\s*:?$/i.test(text)) return true;
   if (/→|->/.test(text)) return true;
   if (/^[A-Z0-9][A-Z0-9 &/+-]{1,55}:?$/.test(text) && text.split(/\s+/).length <= 8) return true;
