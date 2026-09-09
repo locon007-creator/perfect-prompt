@@ -73,14 +73,15 @@ describe('Perfect Prompt primary UI flow', () => {
     expect(output).toContain('Web Experience Engineer');
     expect(output).toContain('Interaction Design Specialist');
     expect(output).toContain('Project type: Website');
-    expect(output).toContain('Creation format: Responsive Web App');
-    expect(output).toContain('Structure Requirements');
+    expect(output).toContain('Experience target: Responsive Web App');
+    expect(output).toContain('Product Brief');
+    expect(output).not.toContain('Structure Requirements');
 
     await click(buttonWithText('Save'));
     expect(JSON.parse(localStorage.getItem('perfect-prompt:saved') || '[]')).toHaveLength(1);
 
     await click(document.querySelector('[aria-label="Open menu"]'));
     await click(buttonWithText('Saved Prompts'));
-    expect(document.querySelector('.saved-card pre')?.textContent).toContain('Creation format: Responsive Web App');
+    expect(document.querySelector('.saved-card pre')?.textContent).toContain('Experience target: Responsive Web App');
   });
 });
