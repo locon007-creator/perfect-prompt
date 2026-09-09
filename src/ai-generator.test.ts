@@ -46,6 +46,11 @@ describe('validateAIPrompt',()=>{
   expect(validateAIPrompt(valid,'app-web-app')).toBe(true);
  });
 
+ it('accepts semantically equivalent hard-lock wording produced by Gemini',()=>{
+  const liveStyle=`Build a complete, single-file mobile web application (index.html). Everything must be contained in the single index.html file with inline CSS and JavaScript. No frameworks, no React, and no build steps. Target a strict mobile viewport of 360px–430px wide.`;
+  expect(validateAIPrompt(liveStyle,'app-web-app')).toBe(true);
+ });
+
  it('rejects missing index.html or inline CSS/JavaScript requirements',()=>{
   expect(validateAIPrompt(valid.replace('index.html','app file'),'app-web-app')).toBe(false);
   expect(validateAIPrompt(valid.replace('inline CSS and JavaScript','styles and scripts'),'app-web-app')).toBe(false);
