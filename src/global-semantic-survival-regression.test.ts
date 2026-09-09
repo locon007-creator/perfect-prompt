@@ -6,25 +6,25 @@ const cases = [
     name: 'finance-style setup flow',
     raw: `Build a personal assistant for one person.\n\nPRIMARY WORKFLOW\nWelcome → Income Setup → Bills Setup → Home\n\nINCOME SETUP\nChoose Fixed or Variable.\nChoose pay frequency.\n\nBILLS SETUP\nUse tap-based bill choices.\nSave due dates.`,
     workflow: 'Welcome → Income Setup → Bills Setup → Home',
-    owned: 'In Income Setup, choose Fixed or Variable',
+    owned: 'Choose Fixed or Variable in Income Setup',
   },
   {
     name: 'task flow',
     raw: `Build a daily task app for one person.\n\nPRIMARY WORKFLOW\nHome → Add Task → Today → Focus Task → Complete → Daily Summary\n\nADD TASK\nUse minimal typing.\nChoose Today, Tomorrow, or Pick Date.\n\nFOCUS TASK\nShow one task and one Complete action.`,
     workflow: 'Home → Add Task → Today → Focus Task → Complete → Daily Summary',
-    owned: 'In Add Task, use minimal typing',
+    owned: 'Use minimal typing in Add Task',
   },
   {
     name: 'recipe flow',
     raw: `Build a weeknight recipe helper.\n\nMAIN WORKFLOW\nHome → Choose Recipe → Cook → Finish\n\nCHOOSE RECIPE\nShow quick filters.\nRemember recent choices.\n\nCOOK\nShow one step at a time.`,
     workflow: 'Home → Choose Recipe → Cook → Finish',
-    owned: 'In Choose Recipe, show quick filters',
+    owned: 'Show quick filters in Choose Recipe',
   },
   {
     name: 'driver flow',
     raw: `Build a personal route helper.\n\nWORKFLOW\nHome → Create Route → Work Mode → Day Complete\n\nCREATE ROUTE\nAdd and reorder stops.\n\nWORK MODE\nShow the active stop.`,
     workflow: 'Home → Create Route → Work Mode → Day Complete',
-    owned: 'In Create Route, add and reorder stops',
+    owned: 'Add and reorder stops in Create Route',
   },
 ];
 
