@@ -22,14 +22,22 @@ const unique = (items: string[]) => items.filter((item, index) =>
 );
 const stripBullet = (value: string) => value.replace(/^\s*(?:[-*•]|\d+[.)])\s*/, '').trim();
 const stripInlineNegative = (value: string) => clean(value.replace(/\s*(?:[.;]\s*)?(?:(?:but\s+)?without|with\s+no|but\s+no|do not|don't|no)\s+.+$/i, ''));
+const stripNegativeLead = (value: string) => clean(value
+  .replace(/^(?:do not|don't|never)\s+/i, '')
+  .replace(/^without\s+/i, '')
+  .replace(/^no\s+/i, '')
+);
 
 const standaloneWorkflowHeading = /^\s*(?:(primary|main)\s+)?(workflow|flow|steps|process)\s*:?[\t ]*$/i;
 const orphanInputFragment = /^\s*(?:allow|include|show|add|record|use|provide|ask)\s*:\s*[.\-]?[\t ]*$/i;
 const workflowAction = /^(?:punch\s+(?:in|out)|start\s+my\s+day|start\s+route|day\s+complete|finish\s+day|start\s+(?:work|shift)|end\s+(?:work|shift)|save|submit|continue|cancel|finish|complete|confirm|delete|remove|done)$/i;
 const actionableLead = /^(?:show|use|choose|allow|ask|set|save|record|display|provide|remember|support|enter|select|keep|default|open|tap|press|mark|update|calculate|track|add|edit|delete)\b/i;
+const behaviorVerb = /\b(?:show|use|choose|allow|ask|set|save|record|display|provide|remember|support|enter|select|keep|default|open|tap|press|mark|update|calculate|track|add|edit|delete|prefill|require|notify|surface)\b/i;
 const conditionalLabel = /^(?:if\b|when\b|whenever\b|only\s+when\b|otherwise\b|for\b)[^:]{0,100}:\s*$/i;
 const conditionalInline = /^(?:only\s+when\b|otherwise\b)/i;
 const negativeClause = /(?:^|[:;,.]\s*|\b)(?:do not|don't|never|without|with\s+no|but\s+no|no)\s+\S/i;
+const lowSignalFragment = /^(?:what\b|who\b|when\b|where\b|been\b|has\s+been\b|have\s+been\b)/i;
+const groupedRequirementLead = /^(?:ask|include|allow|show\b.*|for\s+each\b.+\bask)\s*:\s*$/i;
 
 const normalizeBrief = (raw: string) => raw
   .split(/\r?\n/)
@@ -70,6 +78,19 @@ const ownedInstruction = (step: string, body: string) => {
   return `${value[0].toUpperCase()}${value.slice(1)} in ${step}`;
 };
 
+const completeGroupedChild = (parent: string, child: string) => {
+  const p = clean(parent.replace(/:\s*$/, ''));
+  const c = clean(child);
+  if (!p || !c) return '';
+  if (/^ask$/i.test(p)) return `Ask for ${c}`;
+  const each = /^for\s+each\s+(.+?)\s+ask$/i.exec(p);
+  if (each?.[1]) return `For each ${clean(each[1])}, ask for ${c}`;
+  if (/^include$/i.test(p)) return `Include ${c}`;
+  if (/^allow$/i.test(p)) return `Allow ${c}`;
+  if (/^show\b/i.test(p)) return `Show ${c}`;
+  return `${p}: ${c}`;
+};
+
 const extractOwnedFeatures = (raw: string, workflow: string) => {
   if (!hasStandaloneWorkflowBlock(raw) || !workflow) return [];
   const steps = workflowSteps(workflow);
@@ -85,6 +106,20 @@ const extractOwnedFeatures = (raw: string, workflow: string) => {
       if (isHeading(source, steps)) break;
       const value = stripBullet(source);
       if (!value || orphanInputFragment.test(value) || /^(?:no\b|do not\b|don't\b|without\b)/i.test(value)) continue;
+
+      if (groupedRequirementLead.test(value)) {
+        for (let next = index + 1; next < lines.length; next++) {
+          const rawChild = lines[next];
+          if (!rawChild.trim()) continue;
+          if (isHeading(rawChild, steps) || conditionalLabel.test(stripBullet(rawChild))) break;
+          if (!/^\s*(?:[-*•]|\d+[.)])\s+/.test(rawChild)) break;
+          const instruction = completeGroupedChild(value, stripBullet(rawChild));
+          if (instruction) found.push(ownedInstruction(step, instruction));
+        }
+        continue;
+      }
+
+      if (/[:]\s*$/.test(value)) continue;
       const fieldChoice = /^[A-Za-z][A-Za-z0-9 &/+-]{1,40}:\s*\S+/.test(value);
       if (!actionableLead.test(value) && !fieldChoice) continue;
       const body = stripInlineNegative(value);
@@ -107,12 +142,21 @@ const extractConditionalExtras = (raw: string) => {
     if (conditionalLabel.test(value)) {
       const condition = value.replace(/:\s*$/, '');
       for (let next = index + 1; next < lines.length; next++) {
-        const child = stripBullet(lines[next]);
+        const source = lines[next];
+        const child = stripBullet(source);
         if (!child) continue;
-        if (conditionalLabel.test(child) || /^[A-Z0-9][A-Z0-9 &/+-]{1,56}$/.test(child)) break;
+        if (conditionalLabel.test(child) || isHeading(source, [])) break;
         if (orphanInputFragment.test(child)) continue;
+
+        if (/[:]\s*$/.test(child) && next + 1 < lines.length) {
+          const following = stripBullet(lines[next + 1]);
+          if (following && !isHeading(lines[next + 1], []) && !conditionalLabel.test(following)) {
+            found.push(`${condition}: ${clean(child.replace(/:\s*$/, ''))} ${clean(following)}`);
+            next += 1;
+            continue;
+          }
+        }
         found.push(`${condition}: ${clean(child)}`);
-        break;
       }
       continue;
     }
@@ -121,6 +165,50 @@ const extractConditionalExtras = (raw: string) => {
   }
 
   return unique(found);
+};
+
+const conditionalNegativeBodies = (raw: string) => {
+  const lines = raw.split(/\r?\n/);
+  const found: string[] = [];
+  for (let index = 0; index < lines.length; index++) {
+    const value = stripBullet(lines[index]);
+    if (!conditionalLabel.test(value)) continue;
+    for (let next = index + 1; next < lines.length; next++) {
+      const source = lines[next];
+      const child = stripBullet(source);
+      if (!child) continue;
+      if (conditionalLabel.test(child) || isHeading(source, [])) break;
+      if (negativeClause.test(child)) found.push(stripNegativeLead(child));
+    }
+  }
+  return unique(found.filter(Boolean));
+};
+
+const unscopedNegativeBodies = (raw: string) => {
+  const lines = raw.split(/\r?\n/);
+  const found: string[] = [];
+  let insideConditional = false;
+  for (const source of lines) {
+    const value = stripBullet(source);
+    if (!value) continue;
+    if (conditionalLabel.test(value)) {
+      insideConditional = true;
+      continue;
+    }
+    if (isHeading(source, [])) insideConditional = false;
+    if (!insideConditional && negativeClause.test(value)) found.push(stripNegativeLead(value));
+  }
+  return unique(found.filter(Boolean));
+};
+
+const scopeConditionalExclusions = (raw: string, exclusions: readonly string[]) => {
+  const scoped = conditionalNegativeBodies(raw).map(normalized);
+  const global = unscopedNegativeBodies(raw).map(normalized);
+  return exclusions.filter(exclusion => {
+    const key = normalized(exclusion);
+    if (!key || global.includes(key)) return true;
+    return !scoped.includes(key);
+  });
 };
 
 const exclusionEcho = (value: string, exclusions: readonly string[]) => {
@@ -137,6 +225,33 @@ const exclusionEcho = (value: string, exclusions: readonly string[]) => {
 
 const removeExclusionEchoes = (items: string[], exclusions: readonly string[]) =>
   items.filter(item => !exclusionEcho(item, exclusions));
+
+const parserOnlyFragment = (value: string) => {
+  const text = clean(value);
+  if (!text) return true;
+  if (groupedRequirementLead.test(text)) return true;
+  if (/^(?:(?:main|primary)\s+)?(?:workflow|flow|steps|process)\s*:?$/i.test(text)) return true;
+  if (/→|->/.test(text)) return true;
+  if (/^[A-Z0-9][A-Z0-9 &/+-]{1,55}:?$/.test(text) && text.split(/\s+/).length <= 8) return true;
+  if (/^(?:if|when|whenever|otherwise|only\s+when)\b[^:]*:?$/i.test(text) && !behaviorVerb.test(text)) return true;
+  if (/^(?:on|before|after|during)\b.{0,48}$/i.test(text) && !behaviorVerb.test(text)) return true;
+  if (/^[-*•]\s+/.test(value.trim())) return true;
+  return false;
+};
+
+const polishFeature = (item: string) => clean(item)
+  .replace(/^Record\s+(For each\b)/i, '$1')
+  .replace(/^Record\s+(Show\b)/i, '$1');
+
+const removeLowSignalFragments = (items: string[]) => items
+  .map(polishFeature)
+  .filter(item => {
+    const value = clean(item);
+    if (!value || parserOnlyFragment(value)) return false;
+    if (lowSignalFragment.test(value) && value.split(/\s+/).length <= 5) return false;
+    if (/^[A-Za-z]+\s+(?:paid|done|received)$/i.test(value) && value.split(/\s+/).length <= 3) return false;
+    return true;
+  });
 
 const freezeLock = (lock: IdeaLock): IdeaLock => Object.freeze({
   ...lock,
@@ -156,10 +271,11 @@ export const parseIdea = (raw: string): IdeaLock => core.parseIdea(normalizeBrie
 export function compile(raw: string, options: GenerateOptions = {}): PromptWithSettings {
   const normalizedRaw = normalizeBrief(`${raw}`);
   const base = core.compile(normalizedRaw, { ...options }) as PromptWithSettings;
-  const exclusions = base.lock.explicitExclusions;
+  const exclusions = scopeConditionalExclusions(raw, base.lock.explicitExclusions);
   const cleanedLock = freezeLock({
     ...base.lock,
-    requiredFeatures: removeExclusionEchoes([...base.lock.requiredFeatures], exclusions),
+    explicitExclusions: [...exclusions],
+    requiredFeatures: removeLowSignalFragments(removeExclusionEchoes([...base.lock.requiredFeatures], exclusions)),
     stateRules: removeExclusionEchoes([...base.lock.stateRules], exclusions),
     persistenceRules: removeExclusionEchoes([...base.lock.persistenceRules], exclusions),
     constraints: removeExclusionEchoes([...base.lock.constraints], exclusions),
@@ -167,7 +283,8 @@ export function compile(raw: string, options: GenerateOptions = {}): PromptWithS
   const cleanedBase: PromptWithSettings = {
     ...base,
     lock: cleanedLock,
-    features: removeExclusionEchoes([...base.features], exclusions),
+    doNotAdd: [...exclusions],
+    features: removeLowSignalFragments(removeExclusionEchoes([...base.features], exclusions)),
     states: removeExclusionEchoes([...base.states], exclusions),
     constraints: removeExclusionEchoes([...base.constraints], exclusions),
   };
@@ -180,7 +297,7 @@ export function compile(raw: string, options: GenerateOptions = {}): PromptWithS
 
   return {
     ...cleanedBase,
-    features: unique([...cleanedBase.features, ...ownedFeatures]),
+    features: removeLowSignalFragments(unique([...cleanedBase.features, ...ownedFeatures])),
     states: unique([...cleanedBase.states, ...conditionalExtras]),
   };
 }
