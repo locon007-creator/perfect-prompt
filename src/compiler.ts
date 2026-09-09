@@ -29,7 +29,7 @@ const workflowAction = /^(?:punch\s+(?:in|out)|start\s+my\s+day|start\s+route|da
 const actionableLead = /^(?:show|use|choose|allow|ask|set|save|record|display|provide|remember|support|enter|select|keep|default|open|tap|press|mark|update|calculate|track|add|edit|delete)\b/i;
 const conditionalLabel = /^(?:if\b|when\b|whenever\b|only\s+when\b|otherwise\b|for\b)[^:]{0,100}:\s*$/i;
 const conditionalInline = /^(?:only\s+when\b|otherwise\b)/i;
-const negativeClause = /(?:^|[:;,.]\s*|\b)(?:do not|don't|never|without|with\s+no|but\s+no|no\s+)(?=\S)/i;
+const negativeClause = /(?:^|[:;,.]\s*|\b)(?:do not|don't|never|without|with\s+no|but\s+no|no)\s+\S/i;
 
 const normalizeBrief = (raw: string) => raw
   .split(/\r?\n/)
