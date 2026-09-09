@@ -51,8 +51,13 @@ describe('validateAIPrompt',()=>{
   expect(validateAIPrompt(valid.replace('inline CSS and JavaScript','styles and scripts'),'app-web-app')).toBe(false);
  });
 
- it('rejects missing mobile portrait width lock',()=>{
+ it('rejects missing mobile portrait width lock for app builds',()=>{
   expect(validateAIPrompt(valid.replace('360–430 px','responsive'),'app-web-app')).toBe(false);
+ });
+
+ it('accepts responsive website HTML without forcing the app-only phone width lock',()=>{
+  const website=`Build one complete self-contained index.html with inline CSS and JavaScript. No React, no framework, no build step, and no extra files. Use a responsive browser layout.`;
+  expect(validateAIPrompt(website,'website')).toBe(true);
  });
 
  it('rejects native and framework stack drift',()=>{
