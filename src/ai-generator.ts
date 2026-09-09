@@ -21,16 +21,14 @@ export function validateAIPrompt(prompt:string,buildType:string):boolean{
  if(!text)return false;
  if(!isHtmlBuilderType(buildType))return true;
 
- const required=[
-  /\bindex\.html\b/i,
-  /inline\s+css\s+and\s+javascript/i,
-  /\bno\s+react\b/i,
-  /\bno\s+framework\b/i,
-  /\bno\s+build\s+step\b/i,
-  /\bno\s+extra\s+files\b/i,
- ];
- if(required.some(pattern=>!pattern.test(text)))return false;
- if(isMobileAppType(buildType)&&!/360\s*[–-]\s*430\s*px/i.test(text))return false;
+ const hasIndex=/\bindex\.html\b/i.test(text);
+ const hasInlineAssets=/inline\s+css[\s\S]{0,100}\band\s+javascript\b/i.test(text);
+ const excludesFrameworks=/\bno\s+frameworks?\b/i.test(text);
+ const excludesReact=/\bno\s+react\b/i.test(text)||/\bno\s+frameworks?\b[^.\n]{0,100}\breact\b/i.test(text);
+ const excludesBuild=/\bno\s+build\s+steps?\b/i.test(text);
+ const singleFile=/\bno\s+extra\s+files\b/i.test(text)||/\bsingle[- ]file\b/i.test(text)||/everything\b[^.\n]{0,100}\bcontained\b[^.\n]{0,100}\bindex\.html\b/i.test(text);
+ if(!hasIndex||!hasInlineAssets||!excludesFrameworks||!excludesReact||!excludesBuild||!singleFile)return false;
+ if(isMobileAppType(buildType)&&!/360\s*(?:px\s*)?[–-]\s*430\s*px/i.test(text))return false;
 
  const nativeCreationFormat=/creation\s+format\s*:\s*(?:ios|android)\s+app/i;
  const positiveStackDrift=/(?:build|create|implement|develop|use|using)\b[^.\n]{0,60}\b(?:react(?:\s+native)?|next\.?js|swiftui|swift|kotlin|jetpack\s+compose|flutter)\b/i;
