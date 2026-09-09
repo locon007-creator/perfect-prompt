@@ -5,6 +5,7 @@ import{buildTypeOptions,type BuildType}from'./intent';
 import{creationFormatOptions,type CreationFormat}from'./creation-format';
 import{getStarterCategory,starterCategories,type StarterCategoryId}from'./starter-library';
 import{visualStyleOptions,type VisualStyle}from'./visual-style';
+import{IDEA_CHARACTER_LIMIT}from'./generator-limits';
 import'./styles.css';
 
 type Screen='generator'|'category-index'|'category'|'saved'|'basics'|'settings';
@@ -63,7 +64,7 @@ function App(){
 
  function navigate(next:Screen){setScreen(next);setMenuOpen(false);setBuildPickerOpen(false);setFormatPickerOpen(false);setVisualPickerOpen(false);setConfirmClear(false)}
  function go(){if(!buildType||!creationFormat||!visualStyle){setError('Choose what to build, the format, and the visual style first.');return}try{const next=generate(idea,{buildType,creationFormat,visualStyle});setPrompt(next);setError('')}catch(e){setError(e instanceof Error?e.message:'Please add more detail.')}}
- async function paste(){try{const text=await navigator.clipboard.readText();setIdea(text);setError('')}catch{setError('Clipboard access was blocked. Tap and hold in the idea box to paste.')}}
+ async function paste(){try{const text=await navigator.clipboard.readText();setIdea(text.slice(0,IDEA_CHARACTER_LIMIT));setError('')}catch{setError('Clipboard access was blocked. Tap and hold in the idea box to paste.')}}
  function clearIdea(){setIdea('');setError('')}
  function clearPrompt(){setPrompt('')}
  async function copyPrompt(){if(prompt)await navigator.clipboard.writeText(prompt)}
@@ -102,7 +103,7 @@ function App(){
    {visualPickerOpen&&<div className="build-options visual-options">{visualStyleOptions.map(option=><button key={option.visualStyle} className={visualStyle===option.visualStyle?'selected':''} onClick={()=>{setVisualStyle(option.visualStyle);setVisualPickerOpen(false)}}><span><strong>{option.label}</strong><small>{option.emphasis.slice(0,3).join(' · ')}</small></span>{visualStyle===option.visualStyle&&<span className="check">✓</span>}</button>)}</div>}
   </section>
 
-  <section className="idea-panel" aria-label="Describe your idea"><div className="idea-heading"><div className="idea-title"><span className="idea-icon"><Icon name="pencil"/></span><strong>Describe your idea</strong></div><div className="idea-tools"><button onClick={paste}><Icon name="paste"/>Paste</button><button onClick={clearIdea}><Icon name="trash"/>Clear</button></div></div><textarea value={idea} maxLength={2000} onChange={e=>setIdea(e.target.value)} placeholder="Type or paste your idea here..." aria-label="Idea"/>{!idea&&<p className="example">Example: A budgeting app for personal use<br/>with a clean mobile design, offline support,<br/>and spending insights...</p>}<span className="counter">{idea.length}/2000</span></section>
+  <section className="idea-panel" aria-label="Describe your idea"><div className="idea-heading"><div className="idea-title"><span className="idea-icon"><Icon name="pencil"/></span><strong>Describe your idea</strong></div><div className="idea-tools"><button onClick={paste}><Icon name="paste"/>Paste</button><button onClick={clearIdea}><Icon name="trash"/>Clear</button></div></div><textarea value={idea} maxLength={IDEA_CHARACTER_LIMIT} onChange={e=>setIdea(e.target.value)} placeholder="Type or paste your idea here..." aria-label="Idea"/>{!idea&&<p className="example">Example: A budgeting app for personal use<br/>with a clean mobile design, offline support,<br/>and spending insights...</p>}<span className="counter">{idea.length}/{IDEA_CHARACTER_LIMIT}</span></section>
   {error&&<div className="error" role="alert">{error}</div>}
 
   <section className="category-section"><div className="category-label"><strong>Need a starting point? <span>Choose a category</span></strong><button onClick={()=>navigate('category-index')}>See all <span>→</span></button></div><div className="category-row">{starterCategories.map(item=><button key={item.id} className="category" onClick={()=>openCategory(item.id)}><Icon name={categoryIcons[item.id]}/>{item.label}</button>)}</div></section>
