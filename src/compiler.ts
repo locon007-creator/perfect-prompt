@@ -21,6 +21,7 @@ const unique = (items: string[]) => items.filter((item, index) =>
   items.findIndex(other => normalized(other) === normalized(item)) === index
 );
 const stripBullet = (value: string) => value.replace(/^\s*(?:[-*•]|\d+[.)])\s*/, '').trim();
+const stripInlineNegative = (value: string) => clean(value.replace(/\s*(?:[.;]\s*)?(?:(?:but\s+)?without|with\s+no|but\s+no|do not|don't|no)\s+.+$/i, ''));
 
 const standaloneWorkflowHeading = /^\s*(?:(primary|main)\s+)?(workflow|flow|steps|process)\s*:?[\t ]*$/i;
 const orphanInputFragment = /^\s*(?:allow|include|show|add|record|use|provide|ask)\s*:\s*[.\-]?[\t ]*$/i;
@@ -79,7 +80,8 @@ const extractOwnedFeatures = (raw: string, workflow: string) => {
       if (!value || orphanInputFragment.test(value) || /^(?:no\b|do not\b|don't\b|without\b)/i.test(value)) continue;
       const fieldChoice = /^[A-Za-z][A-Za-z0-9 &/+-]{1,40}:\s*\S+/.test(value);
       if (!actionableLead.test(value) && !fieldChoice) continue;
-      const body = clean(value);
+      const body = stripInlineNegative(value);
+      if (!body) continue;
       found.push(`In ${step}, ${body[0].toLowerCase()}${body.slice(1)}`);
     }
   }
