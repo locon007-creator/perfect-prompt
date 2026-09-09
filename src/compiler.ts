@@ -32,11 +32,12 @@ const standaloneWorkflowHeading = /^\s*(?:(primary|main)\s+)?(workflow|flow|step
 const orphanInputFragment = /^\s*(?:allow|include|show|add|record|use|provide|ask)\s*:\s*[.\-]?[\t ]*$/i;
 const workflowAction = /^(?:punch\s+(?:in|out)|start\s+my\s+day|start\s+route|day\s+complete|finish\s+day|start\s+(?:work|shift)|end\s+(?:work|shift)|save|submit|continue|cancel|finish|complete|confirm|delete|remove|done)$/i;
 const actionableLead = /^(?:show|use|choose|allow|ask|set|save|record|display|provide|remember|support|enter|select|keep|default|open|tap|press|mark|update|calculate|track|add|edit|delete)\b/i;
+const behaviorVerb = /\b(?:show|use|choose|allow|ask|set|save|record|display|provide|remember|support|enter|select|keep|default|open|tap|press|mark|update|calculate|track|add|edit|delete|prefill|require|notify|surface)\b/i;
 const conditionalLabel = /^(?:if\b|when\b|whenever\b|only\s+when\b|otherwise\b|for\b)[^:]{0,100}:\s*$/i;
 const conditionalInline = /^(?:only\s+when\b|otherwise\b)/i;
 const negativeClause = /(?:^|[:;,.]\s*|\b)(?:do not|don't|never|without|with\s+no|but\s+no|no)\s+\S/i;
 const lowSignalFragment = /^(?:what\b|who\b|when\b|where\b|been\b|has\s+been\b|have\s+been\b)/i;
-const groupedRequirementLead = /^(?:ask|include|allow|show|for\s+each\b.+\bask)\s*:\s*$/i;
+const groupedRequirementLead = /^(?:ask|include|allow|show\b.*|for\s+each\b.+\bask)\s*:\s*$/i;
 
 const normalizeBrief = (raw: string) => raw
   .split(/\r?\n/)
@@ -225,13 +226,31 @@ const exclusionEcho = (value: string, exclusions: readonly string[]) => {
 const removeExclusionEchoes = (items: string[], exclusions: readonly string[]) =>
   items.filter(item => !exclusionEcho(item, exclusions));
 
-const removeLowSignalFragments = (items: string[]) => items.filter(item => {
-  const value = clean(item);
-  if (!value) return false;
-  if (lowSignalFragment.test(value) && value.split(/\s+/).length <= 5) return false;
-  if (/^[A-Za-z]+\s+(?:paid|done|received)$/i.test(value) && value.split(/\s+/).length <= 3) return false;
-  return true;
-});
+const parserOnlyFragment = (value: string) => {
+  const text = clean(value);
+  if (!text) return true;
+  if (/^(?:(?:main|primary)\s+)?(?:workflow|flow|steps|process)\s*:?$/i.test(text)) return true;
+  if (/→|->/.test(text)) return true;
+  if (/^[A-Z0-9][A-Z0-9 &/+-]{1,55}:?$/.test(text) && text.split(/\s+/).length <= 8) return true;
+  if (/^(?:if|when|whenever|otherwise|only\s+when)\b[^:]*:?$/i.test(text) && !behaviorVerb.test(text)) return true;
+  if (/^(?:on|before|after|during)\b.{0,48}$/i.test(text) && !behaviorVerb.test(text)) return true;
+  if (/^[-*•]\s+/.test(value.trim())) return true;
+  return false;
+};
+
+const polishFeature = (item: string) => clean(item)
+  .replace(/^Record\s+(For each\b)/i, '$1')
+  .replace(/^Record\s+(Show\b)/i, '$1');
+
+const removeLowSignalFragments = (items: string[]) => items
+  .map(polishFeature)
+  .filter(item => {
+    const value = clean(item);
+    if (!value || parserOnlyFragment(value)) return false;
+    if (lowSignalFragment.test(value) && value.split(/\s+/).length <= 5) return false;
+    if (/^[A-Za-z]+\s+(?:paid|done|received)$/i.test(value) && value.split(/\s+/).length <= 3) return false;
+    return true;
+  });
 
 const freezeLock = (lock: IdeaLock): IdeaLock => Object.freeze({
   ...lock,
@@ -263,6 +282,7 @@ export function compile(raw: string, options: GenerateOptions = {}): PromptWithS
   const cleanedBase: PromptWithSettings = {
     ...base,
     lock: cleanedLock,
+    doNotAdd: [...exclusions],
     features: removeLowSignalFragments(removeExclusionEchoes([...base.features], exclusions)),
     states: removeExclusionEchoes([...base.states], exclusions),
     constraints: removeExclusionEchoes([...base.constraints], exclusions),
