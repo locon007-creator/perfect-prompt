@@ -11,6 +11,11 @@ const isHtmlBuilderType=(buildType:string)=>{
  return ['app-web-app','app','web-app','website','game'].includes(value);
 };
 
+const isMobileAppType=(buildType:string)=>{
+ const value=(buildType||'').toLowerCase();
+ return ['app-web-app','app','web-app'].includes(value);
+};
+
 export function validateAIPrompt(prompt:string,buildType:string):boolean{
  const text=typeof prompt==='string'?prompt.trim():'';
  if(!text)return false;
@@ -23,9 +28,9 @@ export function validateAIPrompt(prompt:string,buildType:string):boolean{
   /\bno\s+framework\b/i,
   /\bno\s+build\s+step\b/i,
   /\bno\s+extra\s+files\b/i,
-  /360\s*[–-]\s*430\s*px/i,
  ];
  if(required.some(pattern=>!pattern.test(text)))return false;
+ if(isMobileAppType(buildType)&&!/360\s*[–-]\s*430\s*px/i.test(text))return false;
 
  const nativeCreationFormat=/creation\s+format\s*:\s*(?:ios|android)\s+app/i;
  const positiveStackDrift=/(?:build|create|implement|develop|use|using)\b[^.\n]{0,60}\b(?:react(?:\s+native)?|next\.?js|swiftui|swift|kotlin|jetpack\s+compose|flutter)\b/i;
