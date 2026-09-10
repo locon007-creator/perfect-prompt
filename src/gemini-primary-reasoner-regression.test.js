@@ -4,27 +4,26 @@ import path from 'node:path';
 
 const source=fs.readFileSync(path.resolve(process.cwd(),'api/generate.js'),'utf8');
 
-describe('Gemini primary reasoning instruction',()=>{
- it('treats the raw idea as highest authority and the Minimal Engine wrapper as hard guardrails',()=>{
-  expect(source).toContain('USER IDEA is the highest authority');
-  expect(source).toContain('MINIMAL ENGINE WRAPPER');
-  expect(source).toContain('HTML hard lock');
-  expect(source).toContain('one self-contained index.html');
-  expect(source).toContain('360–430 px');
+describe('Gemini verifier instruction',()=>{
+ it('positions Gemini after the deterministic compiler',()=>{
+  expect(source).toContain('semantic quality-control');
+  expect(source).toContain('deterministic compiler gives you structure');
+  expect(source).toContain('DETERMINISTIC PERFECT PROMPT COMPILER OUTPUT');
  });
 
- it('does not position Gemini as a repair bot for parser/compiler fragments',()=>{
-  expect(source).not.toContain('repair malformed fragments');
-  expect(source).not.toContain('compiler output is guidance, not authority');
-  expect(source).not.toContain('The compiler gives you structure');
+ it('requires a requirement-by-requirement audit and repair',()=>{
+  expect(source).toContain('Compare the USER IDEA against the compiler output requirement-by-requirement');
+  expect(source).toContain('Restore any requirement');
+  expect(source).toContain('Remove compiler-generated filler');
  });
 
- it('requires preservation of workflow, timing, conditions, persistence, exclusions, and relationships',()=>{
+ it('preserves workflow, timing, conditions, persistence, exclusions, relationships, and hard format rules',()=>{
   expect(source).toContain('workflow');
   expect(source).toContain('timing');
   expect(source).toContain('conditions');
   expect(source).toContain('persistence');
   expect(source).toContain('exclusions');
   expect(source).toContain('relationships');
+  expect(source).toContain('Preserve hard creation-format constraints');
  });
 });
