@@ -23,3 +23,13 @@ test('Gemini audits and repairs deterministic compiler output instead of replaci
   assert.match(instruction, /USER IDEA:[\s\S]*Welcome → Income Setup → Bills Setup → Setup Complete → Home/);
   assert.match(instruction, /DETERMINISTIC PERFECT PROMPT COMPILER OUTPUT:[\s\S]*Idea Lock/);
 });
+
+test('final output is concise and execution-facing instead of exposing compiler machinery', () => {
+  const instruction = buildAIInstruction(payload);
+
+  assert.match(instruction, /do not echo|do not expose/i);
+  assert.match(instruction, /compiler.*headings|compiler.*scaffolding|internal.*scaffolding/i);
+  assert.match(instruction, /merge duplicate|state each requirement once|avoid repeating/i);
+  assert.match(instruction, /never tell.*builder.*generate another prompt|do not tell.*builder.*return.*prompt/i);
+  assert.match(instruction, /working index\.html|actual artifact|build the requested product/i);
+});
