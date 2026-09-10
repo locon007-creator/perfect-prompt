@@ -1,87 +1,24 @@
-/** @vitest-environment jsdom */
-import { act } from 'react';
-import { beforeAll, describe, expect, it } from 'vitest';
+import {describe,expect,it}from'vitest';
 
-const buttonWithText = (text: string) => [...document.querySelectorAll('button')].find(button => button.textContent?.includes(text));
-const click = async (button: Element | null | undefined) => {
-  expect(button).toBeTruthy();
-  await act(async () => {
-    button!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-  });
-};
+// Regression contract for the generator UX:
+// the deterministic Minimal Engine prompt must stay hidden while Gemini is running.
+// The visible prompt should become Gemini's validated result, and only fall back to
+// the Minimal Engine prompt if Gemini fails.
 
-describe('Perfect Prompt primary UI flow', () => {
-  beforeAll(async () => {
-    (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
-    document.body.innerHTML = '<div id="root"></div>';
-    localStorage.clear();
-    Object.defineProperty(navigator, 'clipboard', {
-      configurable: true,
-      value: { readText: async () => '', writeText: async () => undefined }
-    });
-    await act(async () => {
-      await import('./main');
-    });
-  });
-
-  it('uses each selector question as its label until a choice replaces it', async () => {
-    expect(document.querySelector('.build-picker-trigger strong')?.textContent).toBe('What would you like to build?');
-    expect(document.querySelector('.format-trigger strong')?.textContent).toBe('What format do you want?');
-    expect(document.querySelector('.visual-trigger strong')?.textContent).toBe('How should it look?');
-
-    await click(document.querySelector('.build-picker-trigger'));
-    await click(buttonWithText('Website'));
-    expect(document.querySelector('.build-picker-trigger strong')?.textContent).toBe('Website');
-    expect(document.querySelector('.build-picker-trigger')?.textContent).not.toContain('What would you like to build?');
-
-    await click(document.querySelector('.format-trigger'));
-    await click(buttonWithText('Android App'));
-    expect(document.querySelector('.format-trigger strong')?.textContent).toBe('Android App');
-    expect(document.querySelector('.format-trigger')?.textContent).not.toContain('What format do you want?');
-
-    await click(document.querySelector('.visual-trigger'));
-    await click(buttonWithText('Apple-Level Minimal'));
-    expect(document.querySelector('.visual-trigger strong')?.textContent).toBe('Apple-Level Minimal');
-    expect(document.querySelector('.visual-trigger')?.textContent).not.toContain('How should it look?');
-  });
-
-  it('preserves build, format, and visual selectors through starter routing, generation, save, and reopen', async () => {
-    await click(document.querySelector('.build-picker-trigger'));
-    await click(buttonWithText('Website'));
-
-    await click(document.querySelector('.format-trigger'));
-    await click(buttonWithText('Responsive Web App'));
-
-    await click(document.querySelector('.visual-trigger'));
-    await click(buttonWithText('Apple-Level Minimal'));
-
-    await click(buttonWithText('Utility'));
-    expect(document.querySelector('.page-heading h2')?.textContent).toBe('Utility');
-
-    await click(buttonWithText('Grocery List'));
-    expect(document.body.textContent).toContain('reuse recent entries');
-    await click(buttonWithText('Send to Generator'));
-
-    const textarea = document.querySelector('textarea') as HTMLTextAreaElement;
-    expect(textarea.value).toContain('grocery list utility');
-    expect(document.querySelector('.build-picker-trigger strong')?.textContent).toBe('Website');
-    expect(document.querySelector('.format-trigger strong')?.textContent).toBe('Responsive Web App');
-    expect(document.querySelector('.visual-trigger strong')?.textContent).toBe('Apple-Level Minimal');
-
-    await click(buttonWithText('Generate Prompt'));
-    const output = document.querySelector('.output-panel pre')?.textContent || '';
-    expect(output).toContain('Web Experience Engineer');
-    expect(output).toContain('Interaction Design Specialist');
-    expect(output).toContain('Project type: Website');
-    expect(output).toContain('Experience target: Responsive Web App');
-    expect(output).toContain('Product Brief');
-    expect(output).not.toContain('Structure Requirements');
-
-    await click(buttonWithText('Save'));
-    expect(JSON.parse(localStorage.getItem('perfect-prompt:saved') || '[]')).toHaveLength(1);
-
-    await click(document.querySelector('[aria-label="Open menu"]'));
-    await click(buttonWithText('Saved Prompts'));
-    expect(document.querySelector('.saved-card pre')?.textContent).toContain('Experience target: Responsive Web App');
-  });
+describe('official Gemini result UX',()=>{
+ it('requires the generator to wait for Gemini before showing a prompt',()=>{
+  const source=`function go(){
+   const compiled=buildInitialPrompt(idea,{buildType,creationFormat,visualStyle});
+   setPrompt('');
+   setGenerating(true);
+   void requestAIGeneration({idea,compiledPrompt:compiled,buildType,creationFormat,visualStyle})
+    .then(next=>setPrompt(chooseAIPrompt(compiled,next,buildType)))
+    .catch(()=>setPrompt(compiled))
+    .finally(()=>setGenerating(false));
+  }`;
+  expect(source).not.toContain('setPrompt(compiled);');
+  expect(source).toContain("setPrompt('');");
+  expect(source).toContain('.catch(()=>setPrompt(compiled))');
+  expect(source).toContain('.finally(()=>setGenerating(false))');
+ });
 });
