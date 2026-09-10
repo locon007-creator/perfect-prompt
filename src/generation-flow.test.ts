@@ -9,7 +9,7 @@ Bills paid by credit card must never be deducted twice.`;
 
 describe('compiler-first generation flow',()=>{
  it('runs the full deterministic compiler before Gemini receives the prompt',()=>{
-  const out=buildInitialPrompt(idea,{buildType:'app-web-app',creationFormat:'ios-app',visualStyle:'figma-level'});
+  const out=buildInitialPrompt(idea,{buildType:'app-web-app',creationFormat:'ios-app',visualStyle:'figma-product'});
   expect(out).toContain('Role');
   expect(out).toContain('Product Mission');
   expect(out).toContain('Idea Lock');
