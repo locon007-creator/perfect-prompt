@@ -1,6 +1,6 @@
 const DEFAULT_MODEL='gemini-3.6-flash';
-const MAX_IDEA_LENGTH=5000;
-const MAX_COMPILED_LENGTH=20000;
+const MAX_IDEA_LENGTH=12000;
+const MAX_COMPILED_LENGTH=50000;
 
 function send(res,status,body){
  res.status(status).setHeader('Content-Type','application/json; charset=utf-8');
