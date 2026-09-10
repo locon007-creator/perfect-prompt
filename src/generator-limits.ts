@@ -1,1 +1,1 @@
-export const IDEA_CHARACTER_LIMIT = 5000;
+export const IDEA_CHARACTER_LIMIT = 12000;
