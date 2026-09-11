@@ -38,7 +38,7 @@ COMPRESSION STANDARD
 - Prefer strong verbs and concrete behavior over descriptive paragraphs.
 - Keep headings minimal. Use Role, Product Goal, Core Workflow, Critical Features, UI/UX, and Technical Rules only when they improve clarity.
 - Do not repeat the brief back to the user.
-- If the product is unusually complex and cannot be expressed clearly within the selected mode's target, output exactly two focused prompts, each under 200 words: (1) Core Product + Workflow, (2) UI + Intelligence + Technical Completion.
+- ALWAYS return one complete prompt as a single continuous output. Never split the result into Prompt 1 / Prompt 2 or multiple parts, even for complex products. If the brief is large, compress wording while preserving all requirements that materially affect the build.
 
 DEFAULT BUILD TARGET — SINGLE-FILE HTML WEB APP
 Unless the user explicitly requests another output format, platform, framework, or stack, treat app and web-app requests as a single self-contained index.html application.
