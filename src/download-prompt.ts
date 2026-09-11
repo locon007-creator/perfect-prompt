@@ -11,7 +11,8 @@ function findGeneratedActionRow():HTMLElement|null{
  const row=save.parentElement;
  if(!row)return null;
  const labels=Array.from(row.querySelectorAll('button')).map(button=>button.textContent?.trim());
- return labels.includes('Copy')&&labels.includes('Clear')?row:null;
+ const hasCopy=labels.includes('Copy')||labels.includes('Copy Prompt');
+ return hasCopy&&labels.includes('Clear')?row:null;
 }
 
 function findPromptText(row:HTMLElement):string{
