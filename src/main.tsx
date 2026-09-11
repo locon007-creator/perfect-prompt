@@ -1,11 +1,7 @@
-import React,{useMemo,useState}from'react';
+import React,{useState}from'react';
 import{createRoot}from'react-dom/client';
-import{buildInitialPrompt,chooseAIPrompt}from'./generation-flow';
 import{requestAIGeneration}from'./ai-generator';
-import{buildTypeOptions,type BuildType}from'./intent';
-import{creationFormatOptions,type CreationFormat}from'./creation-format';
 import{getStarterCategory,starterCategories,type StarterCategoryId}from'./starter-library';
-import{visualStyleOptions,type VisualStyle}from'./visual-style';
 import{IDEA_CHARACTER_LIMIT}from'./generator-limits';
 import'./styles.css';
 
@@ -46,25 +42,23 @@ function App(){
  const[idea,setIdea]=useState('');
  const[prompt,setPrompt]=useState('');
  const[error,setError]=useState('');
+ const[loading,setLoading]=useState(false);
  const[saved,setSaved]=useState<string[]>(()=>readSaved());
  const[menuOpen,setMenuOpen]=useState(false);
  const[screen,setScreen]=useState<Screen>('generator');
- const[buildType,setBuildType]=useState<BuildType|null>(null);
- const[creationFormat,setCreationFormat]=useState<CreationFormat|null>(null);
- const[visualStyle,setVisualStyle]=useState<VisualStyle|null>(null);
- const[buildPickerOpen,setBuildPickerOpen]=useState(false);
- const[formatPickerOpen,setFormatPickerOpen]=useState(false);
- const[visualPickerOpen,setVisualPickerOpen]=useState(false);
  const[activeCategory,setActiveCategory]=useState<StarterCategoryId>('app');
  const[expandedStarter,setExpandedStarter]=useState<string|null>(null);
  const[confirmClear,setConfirmClear]=useState(false);
- const profile=useMemo(()=>buildType?buildTypeOptions.find(x=>x.buildType===buildType):null,[buildType]);
- const formatProfile=useMemo(()=>creationFormat?creationFormatOptions.find(x=>x.creationFormat===creationFormat):null,[creationFormat]);
- const visualProfile=useMemo(()=>visualStyle?visualStyleOptions.find(x=>x.visualStyle===visualStyle):null,[visualStyle]);
  const category=getStarterCategory(activeCategory);
 
- function navigate(next:Screen){setScreen(next);setMenuOpen(false);setBuildPickerOpen(false);setFormatPickerOpen(false);setVisualPickerOpen(false);setConfirmClear(false)}
- function go(){if(!buildType||!creationFormat||!visualStyle){setError('Choose what to build, the format, and the visual style first.');return}try{const compiled=buildInitialPrompt(idea,{buildType,creationFormat,visualStyle});setPrompt(compiled);setError('');void requestAIGeneration({idea,compiledPrompt:compiled,buildType,creationFormat,visualStyle}).then(next=>{setPrompt(chooseAIPrompt(compiled,next,buildType));setError('')}).catch(()=>{})}catch(e){setError(e instanceof Error?e.message:'Please add more detail.')}}
+ function navigate(next:Screen){setScreen(next);setMenuOpen(false);setConfirmClear(false)}
+ async function go(){
+  if(!idea.trim()){setError('Add a brief before generating.');return}
+  setLoading(true);setError('');setPrompt('');
+  try{setPrompt(await requestAIGeneration({idea:idea.trim()}))}
+  catch(e){setError(e instanceof Error?e.message:'Gemini could not generate the prompt.')}
+  finally{setLoading(false)}
+ }
  async function paste(){try{const text=await navigator.clipboard.readText();setIdea(text.slice(0,IDEA_CHARACTER_LIMIT));setError('')}catch{setError('Clipboard access was blocked. Tap and hold in the idea box to paste.')}}
  function clearIdea(){setIdea('');setError('')}
  function clearPrompt(){setPrompt('')}
@@ -75,7 +69,7 @@ function App(){
  function openCategory(id:StarterCategoryId){setActiveCategory(id);setExpandedStarter(null);setScreen('category');setMenuOpen(false)}
 
  const header=<header className="topbar">
-  <div className="brand-block"><h1>Perfect <span>Prompt</span></h1><p>Turn your ideas into powerful prompts.</p></div>
+  <div className="brand-block"><h1>Perfect <span>Prompt</span></h1><p>Turn your brief into a powerful AI prompt.</p></div>
   <button className="icon-button menu-button" onClick={()=>setMenuOpen(v=>!v)} aria-label="Open menu"><Icon name="menu"/></button>
   {menuOpen&&<div className="menu-popover">
    <button onClick={()=>navigate('generator')}>Generator</button>
@@ -86,31 +80,22 @@ function App(){
   </div>}
  </header>;
 
- if(screen!=='generator')return <main className="app-shell">{header}<div className="screen-toolbar"><button className="back-button" onClick={()=>navigate('generator')}><Icon name="back"/>Generator</button></div>{screen==='category-index'&&<section className="page-card"><div className="page-heading"><Icon name="layers"/><div><h2>Prompt Categories</h2><p>Choose a practical starter category.</p></div></div><div className="category-list">{starterCategories.map(item=><button key={item.id} onClick={()=>openCategory(item.id)}><span className="list-icon"><Icon name={categoryIcons[item.id]}/></span><span><strong>{item.label}</strong><small>{item.description}</small></span><Icon name="chevron"/></button>)}</div></section>}{screen==='category'&&<section className="page-card"><div className="page-heading"><Icon name={categoryIcons[category.id]}/><div><h2>{category.label}</h2><p>{category.description}</p></div></div><div className="starter-list">{category.starters.map(starter=>{const open=expandedStarter===starter.id;return <article className={open?'starter-card open':'starter-card'} key={starter.id}><button className="starter-toggle" onClick={()=>setExpandedStarter(current=>current===starter.id?null:starter.id)}><span>{starter.title}</span><span className={open?'rotate':''}>⌄</span></button>{open&&<div className="starter-body"><p>{starter.brief}</p><button className="send-button" onClick={()=>{setIdea(starter.brief);setScreen('generator');setExpandedStarter(null);setError('')}}>Send to Generator <Icon name="chevron"/></button></div>}</article>})}</div></section>}{screen==='saved'&&<section className="page-card"><div className="page-heading"><Icon name="save"/><div><h2>Saved Prompts</h2><p>Your intentionally saved prompts stay on this device.</p></div></div>{saved.length?<div className="saved-list">{saved.map((item,index)=><article className="saved-card" key={`${item.slice(0,20)}-${index}`}><pre>{item}</pre><div><button onClick={()=>navigator.clipboard.writeText(item)}><Icon name="copy"/>Copy</button><button onClick={()=>removeSaved(index)}><Icon name="trash"/>Delete</button></div></article>)}</div>:<div className="simple-empty"><Icon name="save"/><strong>No saved prompts yet.</strong><p>Generate a prompt, then tap Save.</p></div>}</section>}{screen==='basics'&&<section className="page-card"><div className="page-heading"><Icon name="book"/><div><h2>Prompt Basics</h2><p>Give Perfect Prompt the information that matters.</p></div></div><div className="basics-list"><article><strong>1. Choose what you want to build</strong><p>This selects the technical specialist used by the compiler.</p></article><article><strong>2. Choose the format</strong><p>This tells the compiler whether you intend Android, iOS, responsive web, desktop, dashboard, mobile utility, multi-screen, a single-purpose tool, a website, or want the idea to decide.</p></article><article><strong>3. Choose how it should look</strong><p>This selects the design specialist and visual language without changing your product requirements.</p></article><article><strong>4. Describe the real job</strong><p>Say who it is for, what it should do, the workflow, and anything it must not add.</p></article><article><strong>5. Use a starter only when useful</strong><p>Starter ideas fill the idea box first. You stay in control and can edit before generating.</p></article><article><strong>6. Generate and review</strong><p>Your idea still passes through the deterministic Idea Lock and validation before the final prompt appears.</p></article></div></section>}{screen==='settings'&&<section className="page-card"><div className="page-heading"><Icon name="settings"/><div><h2>Settings</h2><p>Only controls that actually change local app behavior.</p></div></div><div className="settings-row"><div><strong>Clear saved prompts</strong><p>Deletes saved prompts from this browser only.</p></div>{confirmClear?<div className="confirm-actions"><button className="cancel-clear" onClick={()=>setConfirmClear(false)}>Cancel</button><button onClick={clearSaved}>Confirm</button></div>:<button onClick={()=>setConfirmClear(true)} disabled={!saved.length}>Clear</button>}</div></section>}</main>;
+ if(screen!=='generator')return <main className="app-shell">{header}<div className="screen-toolbar"><button className="back-button" onClick={()=>navigate('generator')}><Icon name="back"/>Generator</button></div>
+  {screen==='category-index'&&<section className="page-card"><div className="page-heading"><Icon name="layers"/><div><h2>Prompt Categories</h2><p>Choose a practical starter category.</p></div></div><div className="category-list">{starterCategories.map(item=><button key={item.id} onClick={()=>openCategory(item.id)}><span className="list-icon"><Icon name={categoryIcons[item.id]}/></span><span><strong>{item.label}</strong><small>{item.description}</small></span><Icon name="chevron"/></button>)}</div></section>}
+  {screen==='category'&&<section className="page-card"><div className="page-heading"><Icon name={categoryIcons[category.id]}/><div><h2>{category.label}</h2><p>{category.description}</p></div></div><div className="starter-list">{category.starters.map(starter=>{const open=expandedStarter===starter.id;return <article className={open?'starter-card open':'starter-card'} key={starter.id}><button className="starter-toggle" onClick={()=>setExpandedStarter(current=>current===starter.id?null:starter.id)}><span>{starter.title}</span><span className={open?'rotate':''}>⌄</span></button>{open&&<div className="starter-body"><p>{starter.brief}</p><button className="send-button" onClick={()=>{setIdea(starter.brief);setScreen('generator');setExpandedStarter(null);setError('')}}>Send to Generator <Icon name="chevron"/></button></div>}</article>})}</div></section>}
+  {screen==='saved'&&<section className="page-card"><div className="page-heading"><Icon name="save"/><div><h2>Saved Prompts</h2><p>Your saved prompts stay on this device.</p></div></div>{saved.length?<div className="saved-list">{saved.map((item,index)=><article className="saved-card" key={`${item.slice(0,20)}-${index}`}><pre>{item}</pre><div><button onClick={()=>navigator.clipboard.writeText(item)}><Icon name="copy"/>Copy</button><button onClick={()=>removeSaved(index)}><Icon name="trash"/>Delete</button></div></article>)}</div>:<div className="simple-empty"><Icon name="save"/><strong>No saved prompts yet.</strong><p>Generate a prompt, then tap Save.</p></div>}</section>}
+  {screen==='basics'&&<section className="page-card"><div className="page-heading"><Icon name="book"/><div><h2>Prompt Basics</h2><p>Give Gemini the information that matters.</p></div></div><div className="basics-list"><article><strong>1. Describe the real job</strong><p>Say what you want made, who it is for, the workflow, and what matters most.</p></article><article><strong>2. Include important constraints</strong><p>Add required platforms, formats, behavior, exclusions, or technical rules in the brief.</p></article><article><strong>3. Generate</strong><p>Gemini reads the brief directly and creates the finished prompt. No compiler or intermediate prompt is used.</p></article><article><strong>4. Review and reuse</strong><p>Copy the result, save it locally, or clear it and generate again.</p></article></div></section>}
+  {screen==='settings'&&<section className="page-card"><div className="page-heading"><Icon name="settings"/><div><h2>Settings</h2><p>Only controls that actually change local app behavior.</p></div></div><div className="settings-row"><div><strong>Clear saved prompts</strong><p>Deletes saved prompts from this browser only.</p></div>{confirmClear?<div className="confirm-actions"><button className="cancel-clear" onClick={()=>setConfirmClear(false)}>Cancel</button><button onClick={clearSaved}>Confirm</button></div>:<button onClick={()=>setConfirmClear(true)} disabled={!saved.length}>Clear</button>}</div></section>}
+ </main>;
 
  return <main className="app-shell">{header}
-  <section className="build-picker selector-stack-item">
-   <button className="build-picker-trigger" onClick={()=>{setBuildPickerOpen(v=>!v);setFormatPickerOpen(false);setVisualPickerOpen(false)}} aria-expanded={buildPickerOpen}><span><strong>{profile?.label||'What would you like to build?'}</strong></span><span className={buildPickerOpen?'picker-arrow open':'picker-arrow'}>⌄</span></button>
-   {buildPickerOpen&&<div className="build-options">{buildTypeOptions.map(option=><button key={option.buildType} className={buildType===option.buildType?'selected':''} onClick={()=>{setBuildType(option.buildType);setBuildPickerOpen(false)}}><span><strong>{option.label}</strong><small>{option.emphasis.slice(0,3).join(' · ')}</small></span>{buildType===option.buildType&&<span className="check">✓</span>}</button>)}</div>}
-  </section>
-
-  <section className="build-picker format-picker selector-stack-item">
-   <button className="build-picker-trigger format-trigger" onClick={()=>{setFormatPickerOpen(v=>!v);setBuildPickerOpen(false);setVisualPickerOpen(false)}} aria-expanded={formatPickerOpen}><span><strong>{formatProfile?.label||'What format do you want?'}</strong></span><span className={formatPickerOpen?'picker-arrow open':'picker-arrow'}>⌄</span></button>
-   {formatPickerOpen&&<div className="build-options format-options">{creationFormatOptions.map(option=><button key={option.creationFormat} className={creationFormat===option.creationFormat?'selected':''} onClick={()=>{setCreationFormat(option.creationFormat);setFormatPickerOpen(false)}}><span><strong>{option.label}</strong><small>{option.guidance[0]||'Use the format explicitly stated in the idea.'}</small></span>{creationFormat===option.creationFormat&&<span className="check">✓</span>}</button>)}</div>}
-  </section>
-
-  <section className="build-picker visual-picker selector-stack-item">
-   <button className="build-picker-trigger visual-trigger" onClick={()=>{setVisualPickerOpen(v=>!v);setBuildPickerOpen(false);setFormatPickerOpen(false)}} aria-expanded={visualPickerOpen}><span><strong>{visualProfile?.label||'How should it look?'}</strong></span><span className={visualPickerOpen?'picker-arrow open':'picker-arrow'}>⌄</span></button>
-   {visualPickerOpen&&<div className="build-options visual-options">{visualStyleOptions.map(option=><button key={option.visualStyle} className={visualStyle===option.visualStyle?'selected':''} onClick={()=>{setVisualStyle(option.visualStyle);setVisualPickerOpen(false)}}><span><strong>{option.label}</strong><small>{option.emphasis.slice(0,3).join(' · ')}</small></span>{visualStyle===option.visualStyle&&<span className="check">✓</span>}</button>)}</div>}
-  </section>
-
-  <section className="idea-panel" aria-label="Describe your idea"><div className="idea-heading"><div className="idea-title"><span className="idea-icon"><Icon name="pencil"/></span><strong>Describe your idea</strong></div><div className="idea-tools"><button onClick={paste}><Icon name="paste"/>Paste</button><button onClick={clearIdea}><Icon name="trash"/>Clear</button></div></div><textarea value={idea} maxLength={IDEA_CHARACTER_LIMIT} onChange={e=>setIdea(e.target.value)} placeholder="Type or paste your idea here..." aria-label="Idea"/>{!idea&&<p className="example">Example: A budgeting app for personal use<br/>with a clean mobile design, offline support,<br/>and spending insights...</p>}<span className="counter">{idea.length}/{IDEA_CHARACTER_LIMIT}</span></section>
+  <section className="idea-panel" aria-label="Describe your brief"><div className="idea-heading"><div className="idea-title"><span className="idea-icon"><Icon name="pencil"/></span><strong>Describe your brief</strong></div><div className="idea-tools"><button onClick={paste}><Icon name="paste"/>Paste</button><button onClick={clearIdea}><Icon name="trash"/>Clear</button></div></div><textarea value={idea} maxLength={IDEA_CHARACTER_LIMIT} onChange={e=>setIdea(e.target.value)} placeholder="Type or paste your brief here..." aria-label="Brief"/>{!idea&&<p className="example">Example: Build a premium personal budgeting app<br/>with a simple mobile workflow, offline support,<br/>and clear spending insights...</p>}<span className="counter">{idea.length}/{IDEA_CHARACTER_LIMIT}</span></section>
   {error&&<div className="error" role="alert">{error}</div>}
 
   <section className="category-section"><div className="category-label"><strong>Need a starting point? <span>Choose a category</span></strong><button onClick={()=>navigate('category-index')}>See all <span>→</span></button></div><div className="category-row">{starterCategories.map(item=><button key={item.id} className="category" onClick={()=>openCategory(item.id)}><Icon name={categoryIcons[item.id]}/>{item.label}</button>)}</div></section>
 
-  <button className="generate" onClick={go} disabled={!idea.trim()||!buildType||!creationFormat||!visualStyle}><span className="generate-label"><Icon name="sparkle"/>Generate Prompt</span><span className="generate-arrow"><Icon name="chevron"/></span></button>
-  <section className={prompt?'output-panel has-output':'output-panel'} aria-live="polite">{prompt?<pre>{prompt}</pre>:<div className="empty-state"><div className="bulb"><Icon name="bulb"/></div><h2>Your generated prompt<br/>will appear here after you generate.</h2><p>Choose what to build, its format, and how it should look,<br/>then Perfect Prompt routes the right specialists.</p></div>}</section>
+  <button className="generate" onClick={go} disabled={!idea.trim()||loading}><span className="generate-label"><Icon name="sparkle"/>{loading?'Generating with Gemini...':'Generate Prompt'}</span><span className="generate-arrow"><Icon name="chevron"/></span></button>
+  <section className={prompt?'output-panel has-output':'output-panel'} aria-live="polite">{prompt?<pre>{prompt}</pre>:<div className="empty-state"><div className="bulb"><Icon name="bulb"/></div><h2>{loading?'Gemini is creating your prompt...':'Your generated prompt\nwill appear here after you generate.'}</h2><p>Write or paste your brief, then tap Generate Prompt.</p></div>}</section>
   <div className="output-actions"><button className="copy-action" onClick={copyPrompt} disabled={!prompt}><Icon name="copy"/>Copy Prompt</button><button className="save-action" onClick={savePrompt} disabled={!prompt}><Icon name="save"/>Save</button><button className="clear-action" onClick={clearPrompt} disabled={!prompt}><Icon name="trash"/>Clear</button></div>
  </main>
 }
