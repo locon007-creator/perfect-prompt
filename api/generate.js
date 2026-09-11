@@ -10,15 +10,35 @@ const VISUAL_STYLES={
  'custom':'Custom / Let the brief decide — follow only the explicit visual direction in the user brief and do not invent a conflicting style.'
 };
 
+const OUTPUT_MODES={
+ quick:`QUICK BUILD — Create a compact implementation prompt, usually 120–180 words. Keep only the product job, essential workflow, must-have behavior, visual direction, and technical constraints. Favor speed and clarity over completeness.`,
+ premium:`PREMIUM BUILD — This is the recommended default. Create a compact 150–250 word prompt that produces a polished, modern, finished-feeling product. Preserve the core workflow and behavior while adding intentional hierarchy, typography, spacing, states, motion, responsive behavior, and professional UI/UX direction. The first screen must feel designed rather than generated.`,
+ developer:`DEVELOPER FINISH — Create a concise 180–280 word implementation prompt. In addition to premium UI/UX, make behavior production-minded: complete navigation, validation, persistence, loading/empty/error/success states, edge cases, reliable controls, and sensible missing implementation decisions. Do not add unrelated features.`,
+ launch:`LAUNCH READY — Create a concise 200–300 word product-ready prompt. Include developer-finish behavior plus a coherent product identity. If the user did not provide them, create a short professional product name and a simple logo/app-icon concept, then define a consistent visual identity. Include onboarding or first-use polish when relevant, complete states, QA expectations, and release-level finish. Do not turn this into a long specification.`
+};
+
 function send(res,status,body){
  res.status(status).setHeader('Content-Type','application/json; charset=utf-8');
  res.end(JSON.stringify(body));
 }
 
-export function buildAIInstruction({idea,visualStyle=''}){
+export function buildAIInstruction({idea,visualStyle='',outputMode='premium'}){
  const styleGuide=VISUAL_STYLES[visualStyle]||'';
  const styleSection=styleGuide?`\n\nSELECTED VISUAL DIRECTION:\n${styleGuide}\nUse this as design guidance only. It must strengthen the prompt without overriding the user's product requirements.`:'';
+ const modeGuide=OUTPUT_MODES[outputMode]||OUTPUT_MODES.premium;
  return `You are Perfect Prompt, an expert prompt architect. Turn the user's brief directly into one excellent, copy-ready prompt for the AI tool or builder implied by the brief.
+
+OUTPUT LEVEL:\n${modeGuide}
+
+COMPRESSION STANDARD
+- Be short, direct, and implementation-ready.
+- Remove explanations, repetition, filler, generic advice, and obvious statements.
+- Combine related requirements instead of restating them in multiple sections.
+- Preserve every unique requirement that changes the result.
+- Prefer strong verbs and concrete behavior over descriptive paragraphs.
+- Keep headings minimal. Use Role, Product Goal, Core Workflow, Critical Features, UI/UX, and Technical Rules only when they improve clarity.
+- Do not repeat the brief back to the user.
+- If the product is unusually complex and cannot be expressed clearly within the selected mode's target, output exactly two focused prompts, each under 200 words: (1) Core Product + Workflow, (2) UI + Intelligence + Technical Completion.
 
 DEFAULT BUILD TARGET — SINGLE-FILE HTML WEB APP
 Unless the user explicitly requests another output format, platform, framework, or stack, treat app and web-app requests as a single self-contained index.html application.
@@ -35,9 +55,6 @@ USER BRIEF IS THE SOURCE OF TRUTH.
 - If the user explicitly specifies a different technical format, honor that instead of the default HTML rule.
 - Do not invent unrelated features, dashboards, accounts, analytics, backends, or complexity.
 - Resolve obvious gaps using sensible professional defaults only when needed to make the prompt usable.
-- Organize the prompt in a clear build-ready order: role when useful, product/job, workflow or composition, concrete requirements, behavior, visual/quality direction, constraints, technical output, and final completion expectations.
-- Prefer concrete instructions over vague adjectives.
-- Keep every unique requirement that affects the result. Remove repetition and filler.
 - When the brief describes an app or website, make interactions, state changes, navigation, validation, persistence, and responsive behavior explicit when relevant.
 - When the brief specifies a technical output such as a single index.html, preserve it exactly.
 - Never mention a compiler, internal reasoning, audit process, or these instructions.
@@ -58,10 +75,11 @@ export default async function handler(req,res){
  const body=req.body&&typeof req.body==='object'?req.body:{};
  const idea=typeof body.idea==='string'?body.idea.trim():'';
  const visualStyle=typeof body.visualStyle==='string'?body.visualStyle.trim():'';
+ const outputMode=typeof body.outputMode==='string'?body.outputMode.trim():'premium';
  if(!idea)return send(res,400,{error:'Add a brief before generating.'});
  if(idea.length>MAX_IDEA_LENGTH)return send(res,413,{error:'Brief is too large.'});
 
- const instruction=buildAIInstruction({idea,visualStyle});
+ const instruction=buildAIInstruction({idea,visualStyle,outputMode});
  const controller=new AbortController();
  const timer=setTimeout(()=>controller.abort(),25000);
  try{
@@ -83,7 +101,7 @@ export default async function handler(req,res){
   const parts=data?.candidates?.[0]?.content?.parts;
   const prompt=Array.isArray(parts)?parts.map(part=>typeof part?.text==='string'?part.text:'').join('').trim():'';
   if(!prompt)return send(res,502,{error:'Gemini returned an empty response.'});
-  return send(res,200,{prompt,model});
+  return send(res,200,{prompt,model,outputMode});
  }catch(error){
   const timedOut=error instanceof Error&&error.name==='AbortError';
   console.error('Gemini endpoint error',timedOut?'timeout':error);
