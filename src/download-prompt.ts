@@ -4,39 +4,39 @@ function slugify(value:string){
  return value.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'').slice(0,48);
 }
 
-function findGeneratedActions():HTMLElement|null{
+function findGeneratedActionRow():HTMLElement|null{
  const buttons=Array.from(document.querySelectorAll('button')) as HTMLButtonElement[];
- for(const copy of buttons){
-  if(copy.textContent?.trim()!=='Copy')continue;
-  const parent=copy.parentElement;
-  if(!parent)continue;
-  const labels=Array.from(parent.querySelectorAll('button')).map(button=>button.textContent?.trim());
-  if(labels.includes('Save')&&labels.includes('Clear'))return parent;
- }
- return null;
+ const save=buttons.find(button=>button.textContent?.trim()==='Save');
+ if(!save)return null;
+ const row=save.parentElement;
+ if(!row)return null;
+ const labels=Array.from(row.querySelectorAll('button')).map(button=>button.textContent?.trim());
+ return labels.includes('Copy')&&labels.includes('Clear')?row:null;
 }
 
-function findPromptText(actions:HTMLElement):string{
- let node:HTMLElement|null=actions;
- for(let depth=0;node&&depth<5;depth++,node=node.parentElement){
+function findPromptText(row:HTMLElement):string{
+ let node:HTMLElement|null=row;
+ for(let depth=0;node&&depth<6;depth++,node=node.parentElement){
   const pre=node.querySelector('pre');
   if(pre?.textContent?.trim())return pre.textContent.trim();
-  const textarea=node.querySelector('textarea') as HTMLTextAreaElement|null;
-  if(textarea?.value?.trim()&&textarea.value.trim().length>80)return textarea.value.trim();
+  const textareas=Array.from(node.querySelectorAll('textarea')) as HTMLTextAreaElement[];
+  const output=textareas.find(area=>area.value.trim().length>80);
+  if(output)return output.value.trim();
  }
  return '';
 }
 
 function promptFilename(){
- const textarea=document.querySelector('textarea') as HTMLTextAreaElement|null;
- const firstLine=textarea?.value?.trim().split(/\n+/)[0]||'';
+ const textareas=Array.from(document.querySelectorAll('textarea')) as HTMLTextAreaElement[];
+ const source=textareas.find(area=>area.value.trim())?.value||'';
+ const firstLine=source.trim().split(/\n+/)[0]||'';
  const hint=slugify(firstLine.split(/[:.]/)[0]);
  const date=new Date().toISOString().slice(0,10);
  return `${hint||'perfect-prompt'}-${date}.txt`;
 }
 
-function downloadPrompt(actions:HTMLElement){
- const text=findPromptText(actions);
+function downloadPrompt(row:HTMLElement){
+ const text=findPromptText(row);
  if(!text)return;
  const blob=new Blob([text],{type:'text/plain;charset=utf-8'});
  const url=URL.createObjectURL(blob);
@@ -49,21 +49,25 @@ function downloadPrompt(actions:HTMLElement){
  setTimeout(()=>URL.revokeObjectURL(url),0);
 }
 
-function enhanceDownload(){
- const actions=findGeneratedActions();
- if(!actions||actions.querySelector('[data-download-prompt]'))return;
- const copy=Array.from(actions.querySelectorAll('button')).find(button=>button.textContent?.trim()==='Copy') as HTMLButtonElement|undefined;
- if(!copy)return;
- const button=document.createElement('button');
- button.type='button';
- button.className=copy.className;
- button.dataset.downloadPrompt='true';
- button.textContent='Download .txt';
- button.setAttribute('aria-label','Download generated prompt as a text file');
- button.addEventListener('click',()=>downloadPrompt(actions));
- copy.insertAdjacentElement('afterend',button);
+function replaceSaveWithDownload(){
+ const row=findGeneratedActionRow();
+ if(!row)return;
+ const save=Array.from(row.querySelectorAll('button')).find(button=>button.textContent?.trim()==='Save') as HTMLButtonElement|undefined;
+ if(!save||save.dataset.downloadPrompt==='true')return;
+ const replacement=save.cloneNode(true) as HTMLButtonElement;
+ replacement.dataset.downloadPrompt='true';
+ replacement.textContent='Download .txt';
+ replacement.setAttribute('aria-label','Download generated prompt as a text file');
+ replacement.onclick=null;
+ replacement.addEventListener('click',event=>{
+  event.preventDefault();
+  event.stopPropagation();
+  downloadPrompt(row);
+ });
+ save.replaceWith(replacement);
 }
 
-const downloadObserver=new MutationObserver(enhanceDownload);
+const downloadObserver=new MutationObserver(replaceSaveWithDownload);
 downloadObserver.observe(document.documentElement,{childList:true,subtree:true});
-window.addEventListener('DOMContentLoaded',enhanceDownload);
+window.addEventListener('DOMContentLoaded',replaceSaveWithDownload);
+setTimeout(replaceSaveWithDownload,0);
