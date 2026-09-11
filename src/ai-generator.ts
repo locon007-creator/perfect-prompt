@@ -15,7 +15,7 @@ export async function requestAIGeneration(payload:AIGenerationRequest):Promise<s
  const response=await fetch('/api/generate',{
   method:'POST',
   headers:{'Content-Type':'application/json'},
-  body:JSON.stringify({idea:payload.idea})
+  body:JSON.stringify({idea:payload.idea,visualStyle:payload.visualStyle||''})
  });
  const data=await response.json().catch(()=>({}));
  if(!response.ok){throw new Error(typeof data?.error==='string'?data.error:'Gemini generation is unavailable.');}
