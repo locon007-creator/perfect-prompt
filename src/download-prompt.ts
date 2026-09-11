@@ -1,3 +1,5 @@
+export {};
+
 function slugify(value:string){
  return value.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'').slice(0,48);
 }
@@ -47,7 +49,7 @@ function downloadPrompt(actions:HTMLElement){
  setTimeout(()=>URL.revokeObjectURL(url),0);
 }
 
-function enhance(){
+function enhanceDownload(){
  const actions=findGeneratedActions();
  if(!actions||actions.querySelector('[data-download-prompt]'))return;
  const copy=Array.from(actions.querySelectorAll('button')).find(button=>button.textContent?.trim()==='Copy') as HTMLButtonElement|undefined;
@@ -62,6 +64,6 @@ function enhance(){
  copy.insertAdjacentElement('afterend',button);
 }
 
-const observer=new MutationObserver(enhance);
-observer.observe(document.documentElement,{childList:true,subtree:true});
-window.addEventListener('DOMContentLoaded',enhance);
+const downloadObserver=new MutationObserver(enhanceDownload);
+downloadObserver.observe(document.documentElement,{childList:true,subtree:true});
+window.addEventListener('DOMContentLoaded',enhanceDownload);
