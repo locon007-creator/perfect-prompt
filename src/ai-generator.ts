@@ -1,6 +1,15 @@
 export type AIGenerationRequest={
  idea:string;
+ compiledPrompt?:string;
+ buildType?:string;
+ creationFormat?:string;
+ visualStyle?:string;
 };
+
+// Legacy compatibility only. The live generator no longer uses compiler validation.
+export function validateAIPrompt(prompt:string,_buildType=''):boolean{
+ return typeof prompt==='string'&&Boolean(prompt.trim());
+}
 
 export async function requestAIGeneration(payload:AIGenerationRequest):Promise<string>{
  const response=await fetch('/api/generate',{
