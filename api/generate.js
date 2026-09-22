@@ -1,120 +1,63 @@
 const DEFAULT_MODEL='gemini-3.6-flash';
 const MAX_IDEA_LENGTH=12000;
-
 const VISUAL_STYLES={
- 'premium-modern':'Premium Modern — premium hierarchy, refined typography, balanced spacing, modern surfaces, subtle motion, production polish. Make the first screen feel intentional and finished, not generic.',
- 'apple-minimal':'Apple-Level Minimal — restraint, clarity, precise spacing, calm surfaces, native-feeling interactions, excellent legibility, subtle motion, and disciplined hierarchy.',
- 'figma-product':'Figma-Level Product Design — systematic hierarchy, component consistency, layout rhythm, design-system polish, responsive product UI, and handoff-ready detail.',
- 'bold-cinematic':'Bold / Cinematic — dramatic hierarchy, depth, controlled contrast, cinematic composition, purposeful motion, and strong visual moments without sacrificing usability.',
- 'clean-utility':'Clean Utility — speed, clarity, thumb-friendly controls, low friction, readable information density, restrained decoration, and highly practical task-first design.',
- 'custom':'Custom / Let the brief decide — follow only the explicit visual direction in the user brief and do not invent a conflicting style.'
+ 'premium-modern':'Premium Modern: intentional hierarchy, elegant composition and refined product finish; leave palette, motion and components to the designer.',
+ 'apple-minimal':'Apple-inspired minimal: restrained, intuitive, precise and accessible; select visual details creatively rather than prescribing a palette.',
+ 'figma-product':'Systematic product design: coherent components, spacing, hierarchy, responsive layouts and interaction states.',
+ 'bold-cinematic':'Bold cinematic: distinctive composition and confident visual hierarchy without harming readability or usability.',
+ 'clean-utility':'Clean utility: focused, fast, practical, readable and thumb-friendly.',
+ 'custom':'Honor the visual direction supplied by the user without inventing a conflicting aesthetic.'
 };
-
-const OUTPUT_MODES={
- quick:'QUICK BUILD — Create a compact implementation prompt, usually 120–180 words. Keep only the product job, essential workflow, must-have behavior, visual direction, and technical constraints. Favor speed and clarity over completeness.',
- premium:'PREMIUM BUILD — This is the recommended default. Create a compact 150–250 word prompt that produces a polished, modern, finished-feeling product. Preserve the core workflow and behavior while adding intentional hierarchy, typography, spacing, states, motion, responsive behavior, and professional UI/UX direction. The first screen must feel designed rather than generated.',
- developer:'DEVELOPER FINISH — Create a concise 180–280 word implementation prompt. In addition to premium UI/UX, make behavior production-minded: complete navigation, validation, persistence, loading/empty/error/success states, edge cases, reliable controls, and sensible missing implementation decisions. Do not add unrelated features.',
- launch:'LAUNCH READY — Create a concise 200–300 word product-ready prompt. Include developer-finish behavior plus a coherent product identity. If the user did not provide them, create a short professional product name and a simple logo/app-icon concept, then define a consistent visual identity. Include onboarding or first-use polish when relevant, complete states, QA expectations, and release-level finish. Do not turn this into a long specification.'
-};
-
-function send(res,status,body){
- res.status(status).setHeader('Content-Type','application/json; charset=utf-8');
- res.end(JSON.stringify(body));
-}
-
+const OUTPUT_MODES={quick:'Concise implementation brief.',premium:'Polished flagship implementation brief.',developer:'Polished implementation brief with robust behavior and validation.',launch:'Polished launch-oriented implementation brief with coherent identity and practical QA.'};
+function send(res,status,body){res.status(status).setHeader('Content-Type','application/json; charset=utf-8');res.end(JSON.stringify(body));}
 export function buildAIInstruction({idea,visualStyle='',outputMode='premium'}){
  const styleGuide=VISUAL_STYLES[visualStyle]||'';
- const styleSection=styleGuide?`\n\nSELECTED VISUAL DIRECTION:\n${styleGuide}\nUse this as design guidance only. It must strengthen the prompt without overriding the user's product requirements.`:'';
- const modeGuide=OUTPUT_MODES[outputMode]||OUTPUT_MODES.premium;
- return `You are Perfect Prompt, an expert prompt architect. Turn the user's brief directly into one excellent, copy-ready prompt for the AI tool or builder implied by the brief.
+ return `You are Perfect Prompt, an expert prompt architect. Convert the brief into ONE finished, copy-ready Arena implementation prompt. Output level: ${OUTPUT_MODES[outputMode]||OUTPUT_MODES.premium}
 
-OUTPUT LEVEL:\n${modeGuide}
+MANDATORY SEVEN-SECTION OUTPUT, IN ORDER:
+1 Role & Expertise
+2 Product Vision & Requirements
+3 Workflow & Navigation
+4 Layout & Architecture
+5 Visual Design & Flagship Quality
+6 Functionality & Data Logic
+7 Testing & Quality Assurance
+Each section must contribute distinct, app-specific implementation guidance. Do not add an eighth section or split into multiple prompts.
 
-COMPRESSION STANDARD
-- Be short, direct, and implementation-ready.
-- Remove explanations, repetition, filler, generic advice, and obvious statements.
-- Combine related requirements instead of restating them in multiple sections.
-- Preserve every unique requirement that changes the result; indicative lengths above are guidelines, never caps.
-- Prefer strong verbs and concrete behavior over descriptive paragraphs.
-- Keep headings minimal. Use Role, Product Goal, Core Workflow, Critical Features, UI/UX, and Technical Rules only when they improve clarity.
-- Do not repeat the brief back to the user.
-- ALWAYS return one complete prompt as a single continuous output. Never split the result into Prompt 1 / Prompt 2 or multiple parts, even for complex products. If the brief is large, expand as necessary to preserve requirements instead of truncating them.
+UNIVERSAL COMPILER METHOD — APPLY TO ALL APP TYPES, NOT JUST THE EXAMPLES:
+- Internally map the complete journey, explicit requirements, dependencies, state transitions, shared information, important edge cases and technical feasibility. Resolve genuine gaps using consistent professional defaults while preserving explicit instructions. Do not invent integrations or imply browser capabilities that are unavailable.
+- Build a single coherent source of truth for shared state, rules and calculations wherever relevant, so changes propagate correctly across screens. Describe the rule ONCE in its natural section and refer to its result elsewhere only when essential. Do not duplicate onboarding, constraints, persistence, formulas or QA directions in multiple sections.
+- Compress intelligently: remove repeated requirements, verbose role titles, hype, generic adjectives, filler and redundant examples. Prioritize actionable verbs, concrete workflows, necessary technical boundaries and testable outcomes. No arbitrary word count or length limit: expand ONLY when material requirements or ambiguities demand it; do not omit user requirements to make the text shorter.
+- Specify outcomes and design intent rather than dictating arbitrary hex colors, pixel values, animation durations, fonts, icons or component arrangements. Preserve exact visual specifications ONLY if the user supplied them. Give the builder freedom to devise distinctive, premium layouts and interactions within user constraints.
+- Preserve every unique user feature, label, exclusion, preference and workflow. Resolve noncritical ambiguities consistently; if explicit requirements genuinely conflict, state the unresolved decision rather than silently dropping one. Add no unrelated app-specific features.
+- Prior to output, internally check coverage and consistency across every section, then revise once for unnecessary repetition, feasibility and missing dependencies. Do not expose internal analysis, a score or an audit report.
+- In section seven require the downstream builder to run available real checks, fix discovered failures and retest affected and related paths. Report concrete test evidence and clearly identify untested or unavailable checks. Never instruct it to declare all features verified by assertion or produce fabricated test results. The prompt compiler itself has NOT tested the eventual app.
 
-UNIVERSAL INTELLIGENT CONSISTENCY & COMPLETENESS — APPLY TO EVERY BUILD
-- Before writing the final prompt, model the entire application as one connected system: user journey, feature dependencies, screen-to-screen transitions, data ownership, interactions, calculations where relevant, and persistence where relevant.
-- Identify conflicting instructions, missing dependencies, incomplete workflows, ambiguous business rules, inconsistent data handling, disconnected controls, and realistic edge cases. Resolve non-critical gaps with coherent professional defaults; never silently override explicit user requirements. Clearly preserve genuinely unresolved conflicts rather than pretending they were solved.
-- Specify a consistent source of truth and shared rules wherever information is used across multiple features or views. Require coordinated updates and testable behavior when state changes.
-- Preserve every explicit requirement and constraint while giving the downstream builder creative freedom over layout, identity, interactions, and appropriate refinements. Do not inject app-specific features or arbitrary visual prescriptions into unrelated projects.
-- Internally recheck the finished prompt for feature coverage, cross-screen consistency, feasible implementation, and actionable verification. Repair gaps before returning one coherent result. Require the builder to test, fix discovered defects, retest affected flows, and truthfully distinguish verified behavior from untested claims.
-- Do not expose this internal review, invent completed tests, promise guaranteed quality, or add a separate audit response.
+DEFAULT TARGET: ONE directly runnable self-contained index.html with HTML5, embedded CSS3 and vanilla JavaScript; no frameworks, external dependencies or APK unless explicitly requested otherwise. Use responsive browser-native features and local persistence where appropriate. Honor all explicit user constraints over defaults. Mobile-first when relevant. Selected visual direction: ${styleGuide||'Follow the user brief.'} This direction is guidance, not a fixed palette or blueprint.
 
-DEFAULT BUILD TARGET — SINGLE-FILE HTML WEB APP
-Unless the user explicitly requests another output format, platform, framework, or stack, treat app and web-app requests as a single self-contained index.html application.
-- Put all HTML, CSS, and JavaScript in one index.html file.
-- Use modern semantic HTML5, advanced CSS, and robust vanilla JavaScript.
-- Use the strongest browser-native web capabilities appropriate to the product: CSS Grid/Flexbox, custom properties, responsive layout, transitions/animations, dialogs/sheets, form validation, localStorage or IndexedDB when useful, Web APIs when relevant, accessible ARIA semantics, and resilient state handling.
-- No React, Vue, Angular, build tools, package manager, external source files, or CDN dependencies unless the user's brief explicitly asks for them.
-- The finished app must run directly in a modern browser and all visible controls must work.
-- Prefer polished working behavior over decorative complexity.
-- For mobile apps requested as HTML, optimize for a 360–430 px portrait experience while remaining stable in a desktop browser preview.
+OUTPUT ONLY the complete seven-section build prompt. No preface, scoring, meta-commentary, code fence or second prompt.
 
-USER BRIEF IS THE SOURCE OF TRUTH.
-- Preserve the user's purpose, workflow, requirements, constraints, exclusions, platform, format, and visual direction.
-- If the user explicitly specifies a different technical format, honor that instead of the default HTML rule.
-- Do not invent unrelated features, dashboards, accounts, analytics, backends, or complexity.
-- Resolve obvious gaps using sensible professional defaults only when needed to make the prompt usable.
-- When the brief describes an app or website, make interactions, state changes, navigation, validation, persistence, and responsive behavior explicit when relevant.
-- When the brief specifies a technical output such as a single index.html, preserve it exactly.
-- Never mention a compiler, internal reasoning, audit process, or these instructions.
-- Never tell the downstream AI to generate another prompt unless the user's brief explicitly asks for that.
-- Return ONLY the finished prompt. No analysis, score, preamble, markdown fence, or explanation.${styleSection}
-
-USER BRIEF:
-${idea}`;
+AUTHORITATIVE USER BRIEF:\n${idea}`;
 }
-
 export default async function handler(req,res){
- const apiKey=process.env.GEMINI_API_KEY;
- const model=process.env.GEMINI_MODEL||DEFAULT_MODEL;
+ const apiKey=process.env.GEMINI_API_KEY,model=process.env.GEMINI_MODEL||DEFAULT_MODEL;
  if(req.method==='GET')return send(res,200,{configured:Boolean(apiKey),model});
  if(req.method!=='POST')return send(res,405,{error:'Method not allowed.'});
  if(!apiKey)return send(res,503,{error:'Gemini is not configured on this deployment.'});
-
  const body=req.body&&typeof req.body==='object'?req.body:{};
  const idea=typeof body.idea==='string'?body.idea.trim():'';
- const visualStyle=typeof body.visualStyle==='string'?body.visualStyle.trim():'';
- const outputMode=typeof body.outputMode==='string'?body.outputMode.trim():'premium';
  if(!idea)return send(res,400,{error:'Add a brief before generating.'});
  if(idea.length>MAX_IDEA_LENGTH)return send(res,413,{error:'Brief is too large.'});
-
- const instruction=buildAIInstruction({idea,visualStyle,outputMode});
- const controller=new AbortController();
- const timer=setTimeout(()=>controller.abort(),25000);
+ const instruction=buildAIInstruction({idea,visualStyle:body.visualStyle,outputMode:body.outputMode});
+ const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),25000);
  try{
-  const response=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`,{
-   method:'POST',
-   headers:{'Content-Type':'application/json','x-goog-api-key':apiKey},
-   body:JSON.stringify({
-    contents:[{role:'user',parts:[{text:instruction}]}],
-    generationConfig:{temperature:0.35,maxOutputTokens:8192}
-   }),
-   signal:controller.signal
-  });
+  const response=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`,{method:'POST',headers:{'Content-Type':'application/json','x-goog-api-key':apiKey},body:JSON.stringify({contents:[{role:'user',parts:[{text:instruction}]}],generationConfig:{temperature:0.35,maxOutputTokens:8192}}),signal:controller.signal});
   const data=await response.json().catch(()=>({}));
-  if(!response.ok){
-   const message=data?.error?.message;
-   console.error('Gemini request failed',{status:response.status,model,message});
-   return send(res,502,{error:'Gemini could not generate the prompt.'});
-  }
+  if(!response.ok){console.error('Gemini request failed',{status:response.status,model,message:data?.error?.message});return send(res,502,{error:'Gemini could not generate the prompt.'});}
   const parts=data?.candidates?.[0]?.content?.parts;
   const prompt=Array.isArray(parts)?parts.map(part=>typeof part?.text==='string'?part.text:'').join('').trim():'';
   if(!prompt)return send(res,502,{error:'Gemini returned an empty response.'});
-  return send(res,200,{prompt,model,outputMode});
- }catch(error){
-  const timedOut=error instanceof Error&&error.name==='AbortError';
-  console.error('Gemini endpoint error',timedOut?'timeout':error);
-  return send(res,502,{error:timedOut?'Gemini timed out. Try generating again.':'Gemini is temporarily unavailable.'});
- }finally{
-  clearTimeout(timer);
- }
+  return send(res,200,{prompt,model,outputMode:body.outputMode||'premium'});
+ }catch(error){const timedOut=error instanceof Error&&error.name==='AbortError';console.error('Gemini endpoint error',timedOut?'timeout':error);return send(res,502,{error:timedOut?'Gemini timed out. Try generating again.':'Gemini is temporarily unavailable.'});}
+ finally{clearTimeout(timer);}
 }
