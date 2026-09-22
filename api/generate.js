@@ -11,10 +11,10 @@ const VISUAL_STYLES={
 };
 
 const OUTPUT_MODES={
- quick:`QUICK BUILD — Create a compact implementation prompt, usually 120–180 words. Keep only the product job, essential workflow, must-have behavior, visual direction, and technical constraints. Favor speed and clarity over completeness.`,
- premium:`PREMIUM BUILD — This is the recommended default. Create a compact 150–250 word prompt that produces a polished, modern, finished-feeling product. Preserve the core workflow and behavior while adding intentional hierarchy, typography, spacing, states, motion, responsive behavior, and professional UI/UX direction. The first screen must feel designed rather than generated.`,
- developer:`DEVELOPER FINISH — Create a concise 180–280 word implementation prompt. In addition to premium UI/UX, make behavior production-minded: complete navigation, validation, persistence, loading/empty/error/success states, edge cases, reliable controls, and sensible missing implementation decisions. Do not add unrelated features.`,
- launch:`LAUNCH READY — Create a concise 200–300 word product-ready prompt. Include developer-finish behavior plus a coherent product identity. If the user did not provide them, create a short professional product name and a simple logo/app-icon concept, then define a consistent visual identity. Include onboarding or first-use polish when relevant, complete states, QA expectations, and release-level finish. Do not turn this into a long specification.`
+ quick:'QUICK BUILD — Create a compact implementation prompt, usually 120–180 words. Keep only the product job, essential workflow, must-have behavior, visual direction, and technical constraints. Favor speed and clarity over completeness.',
+ premium:'PREMIUM BUILD — This is the recommended default. Create a compact 150–250 word prompt that produces a polished, modern, finished-feeling product. Preserve the core workflow and behavior while adding intentional hierarchy, typography, spacing, states, motion, responsive behavior, and professional UI/UX direction. The first screen must feel designed rather than generated.',
+ developer:'DEVELOPER FINISH — Create a concise 180–280 word implementation prompt. In addition to premium UI/UX, make behavior production-minded: complete navigation, validation, persistence, loading/empty/error/success states, edge cases, reliable controls, and sensible missing implementation decisions. Do not add unrelated features.',
+ launch:'LAUNCH READY — Create a concise 200–300 word product-ready prompt. Include developer-finish behavior plus a coherent product identity. If the user did not provide them, create a short professional product name and a simple logo/app-icon concept, then define a consistent visual identity. Include onboarding or first-use polish when relevant, complete states, QA expectations, and release-level finish. Do not turn this into a long specification.'
 };
 
 function send(res,status,body){
@@ -34,11 +34,19 @@ COMPRESSION STANDARD
 - Be short, direct, and implementation-ready.
 - Remove explanations, repetition, filler, generic advice, and obvious statements.
 - Combine related requirements instead of restating them in multiple sections.
-- Preserve every unique requirement that changes the result.
+- Preserve every unique requirement that changes the result; indicative lengths above are guidelines, never caps.
 - Prefer strong verbs and concrete behavior over descriptive paragraphs.
 - Keep headings minimal. Use Role, Product Goal, Core Workflow, Critical Features, UI/UX, and Technical Rules only when they improve clarity.
 - Do not repeat the brief back to the user.
-- ALWAYS return one complete prompt as a single continuous output. Never split the result into Prompt 1 / Prompt 2 or multiple parts, even for complex products. If the brief is large, compress wording while preserving all requirements that materially affect the build.
+- ALWAYS return one complete prompt as a single continuous output. Never split the result into Prompt 1 / Prompt 2 or multiple parts, even for complex products. If the brief is large, expand as necessary to preserve requirements instead of truncating them.
+
+UNIVERSAL INTELLIGENT CONSISTENCY & COMPLETENESS — APPLY TO EVERY BUILD
+- Before writing the final prompt, model the entire application as one connected system: user journey, feature dependencies, screen-to-screen transitions, data ownership, interactions, calculations where relevant, and persistence where relevant.
+- Identify conflicting instructions, missing dependencies, incomplete workflows, ambiguous business rules, inconsistent data handling, disconnected controls, and realistic edge cases. Resolve non-critical gaps with coherent professional defaults; never silently override explicit user requirements. Clearly preserve genuinely unresolved conflicts rather than pretending they were solved.
+- Specify a consistent source of truth and shared rules wherever information is used across multiple features or views. Require coordinated updates and testable behavior when state changes.
+- Preserve every explicit requirement and constraint while giving the downstream builder creative freedom over layout, identity, interactions, and appropriate refinements. Do not inject app-specific features or arbitrary visual prescriptions into unrelated projects.
+- Internally recheck the finished prompt for feature coverage, cross-screen consistency, feasible implementation, and actionable verification. Repair gaps before returning one coherent result. Require the builder to test, fix discovered defects, retest affected flows, and truthfully distinguish verified behavior from untested claims.
+- Do not expose this internal review, invent completed tests, promise guaranteed quality, or add a separate audit response.
 
 DEFAULT BUILD TARGET — SINGLE-FILE HTML WEB APP
 Unless the user explicitly requests another output format, platform, framework, or stack, treat app and web-app requests as a single self-contained index.html application.
