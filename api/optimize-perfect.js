@@ -15,22 +15,22 @@ export default async function handler(req,res){
  if(input.length<12||input.length>5000||!MODES[mode])return res.status(400).json({error:'Invalid text or optimization mode'});
  if(!process.env.GEMINI_API_KEY)return res.status(503).json({error:'Gemini key not configured in Perfect Prompt'});
  const instruction=MODES[mode]+'\n'+FORMAT;
- let final=null,errorStatus=502;
+ let final=null,errorStatus=502;const debug=[];
  for(const model of [...new Set(['gemini-3.5-flash-lite','gemini-3.5-flash',process.env.GEMINI_MODEL,'gemini-2.5-flash'].filter(Boolean))]){
   try{
    const r=await fetch('https://generativelanguage.googleapis.com/v1beta/models/'+encodeURIComponent(model)+':generateContent',{method:'POST',headers:{'Content-Type':'application/json','x-goog-api-key':process.env.GEMINI_API_KEY},body:JSON.stringify({systemInstruction:{parts:[{text:instruction}]},contents:[{role:'user',parts:[{text:input}]}],generationConfig:{temperature:0.5,maxOutputTokens:6000}}),signal:AbortSignal.timeout(21000)});
    errorStatus=r.status;
-   if(!r.ok){if([404,429,503].includes(r.status))continue;return res.status(502).json({error:'Gemini returned HTTP '+r.status})}
+   if(!r.ok){debug.push({model,status:r.status});if([404,429,503].includes(r.status))continue;return res.status(502).json({error:'Gemini returned HTTP '+r.status,debug})}
    const j=await r.json(),raw=(j.candidates?.[0]?.content?.parts||[]).map(p=>p.text||'').join('');
    const a=raw.indexOf('---EXPLANATION---'),b=raw.indexOf('---CHANGES---');
-   if(a<0||b<a)continue;
+   if(a<0||b<a){debug.push({model,status:'missing delimiters',chars:raw.length,preview:raw.slice(0,70)});continue;}
    const prompt=raw.slice(0,a).replace(/---SCORE---\d{1,3}(?:---)?/g,'').trim();
    const explanation=raw.slice(a+'---EXPLANATION---'.length,b).trim();
    const changes=raw.slice(b+'---CHANGES---'.length).trim();
-   if(prompt.length<120||!explanation||!changes)continue;
+   if(prompt.length<120||!explanation||!changes){debug.push({model,status:'incomplete sections',chars:raw.length});continue;}
    final={optimizedText:prompt,explanation,changes,provider:'gemini',model,mode,engine:'PromptPerfect OSS optimization'};break;
-  }catch(e){if(e.name==='TimeoutError'||e.name==='AbortError')errorStatus=504;else errorStatus=502;}
+  }catch(e){debug.push({model,status:e.name||'error'});if(e.name==='TimeoutError'||e.name==='AbortError')errorStatus=504;else errorStatus=502;}
  }
- if(!final)return res.status(errorStatus===429?429:502).json({error:'Gemini could not complete PromptPerfect optimization',providerStatus:errorStatus});
+ if(!final)return res.status(errorStatus===429?429:502).json({error:'Gemini could not complete PromptPerfect optimization',providerStatus:errorStatus,debug});
  return res.status(200).json(final);
 }
