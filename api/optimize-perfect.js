@@ -16,7 +16,7 @@ export default async function handler(req,res){
  if(!process.env.GEMINI_API_KEY)return res.status(503).json({error:'Gemini key not configured in Perfect Prompt'});
  const instruction=MODES[mode]+'\n'+FORMAT;
  let final=null,errorStatus=502;
- for(const model of [...new Set([process.env.GEMINI_MODEL,'gemini-2.5-flash','gemini-2.5-flash-lite'].filter(Boolean))]){
+ for(const model of [...new Set(['gemini-3.5-flash-lite','gemini-3.5-flash',process.env.GEMINI_MODEL,'gemini-2.5-flash'].filter(Boolean))]){
   try{
    const r=await fetch('https://generativelanguage.googleapis.com/v1beta/models/'+encodeURIComponent(model)+':generateContent',{method:'POST',headers:{'Content-Type':'application/json','x-goog-api-key':process.env.GEMINI_API_KEY},body:JSON.stringify({systemInstruction:{parts:[{text:instruction}]},contents:[{role:'user',parts:[{text:input}]}],generationConfig:{temperature:0.5,maxOutputTokens:6000}}),signal:AbortSignal.timeout(21000)});
    errorStatus=r.status;
